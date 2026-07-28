@@ -40,6 +40,10 @@ class Fib:
         self._entries[prefix] = entry
         return entry
 
+    def remove(self, prefix: str) -> bool:
+        """Withdraw a route. Used when a producer departs or moves."""
+        return self._entries.pop(prefix, None) is not None
+
     def exact(self, name: str) -> Optional[FibEntry]:
         self.lookups += 1
         entry = self._entries.get(name)

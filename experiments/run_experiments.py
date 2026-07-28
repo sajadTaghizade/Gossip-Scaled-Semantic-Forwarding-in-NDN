@@ -36,6 +36,8 @@ from gsndn import datasets  # noqa: E402
 from gsndn.embeddings import PrecomputedBackend  # noqa: E402
 from gsndn.metrics import aggregate, format_table  # noqa: E402
 from gsndn.runner import RunResult, ScenarioConfig, run_once  # noqa: E402
+from gsndn.adversary import AdversaryConfig  # noqa: E402
+from gsndn.churn import ChurnConfig  # noqa: E402
 from gsndn.workload import WorkloadConfig  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,6 +45,7 @@ RESULTS_DIR = ROOT / "results"
 COSTS_PATH = ROOT / "data" / "costs.json"
 
 SEMANTIC_STRATEGIES = ("saf", "saf+es", "gs-ndn")
+RISK_STRATEGIES = ("saf+es", "gs-ndn", "rc-ndn")
 ALL_STRATEGIES = ("vanilla-ndn",) + SEMANTIC_STRATEGIES
 
 REPORT_COLUMNS = (
@@ -84,9 +87,16 @@ def base_config(domain: str, **overrides) -> ScenarioConfig:
         distractor_rate=overrides.pop("distractor_rate", 0.1),
         overlap=overrides.pop("overlap", 0.5),
     )
+    churn = overrides.pop("churn", None)
+    adversary = overrides.pop("adversary", None)
+    extra = {}
+    if churn is not None:
+        extra["churn"] = churn
+    if adversary is not None:
+        extra["adversary"] = adversary
     return ScenarioConfig(
         domain=domain, workload=workload, costs_path=COSTS_PATH,
-        threshold=overrides.pop("threshold", 0.6), **overrides,
+        threshold=overrides.pop("threshold", 0.6), **extra, **overrides,
     )
 
 
@@ -98,12 +108,12 @@ def exp_main(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows = {}
-        for strategy in ALL_STRATEGIES:
-            config = base_config(domain, strategy=strategy)
+        for strategy in ALL_STRATEGIES + ("rc-ndn",):
+            config = base_config(domain, strategy=strategy, epsilon=0.2, n_edges=8)
             rows[strategy] = aggregate(bench.metrics(config, seeds))
         out[domain] = rows
         print(f"\n--- {domain} ---")
-        print(format_table(rows, REPORT_COLUMNS))
+        print(format_table(rows, REPORT_COLUMNS + ("risk_realised_error",)))
     return out
 
 
@@ -295,7 +305,129 @@ def exp_encoder(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_risk(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Does the error budget hold, and what does tightening it cost?
+
+    The realised error is measured out of sample, over exactly the decisions the
+    budget governs -- semantic resolutions, whether fresh, cached or learned from
+    a neighbour. Exact FIB matches are excluded: they were never a judgement
+    call and including them would dilute any rate towards zero.
+    """
+    epsilons = (0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        for strategy in ("rc-ndn", "rc-ndn-no-explore", "rc-ndn-no-evidence"):
+            per_epsilon = {}
+            for epsilon in epsilons:
+                config = base_config(
+                    domain, strategy=strategy, epsilon=epsilon, n_edges=8,
+                )
+                per_epsilon[str(epsilon)] = aggregate(bench.metrics(config, seeds))
+            rows[strategy] = per_epsilon
+        out[domain] = rows
+        print(f"\n--- {domain}: error budget ---")
+        for strategy, per_epsilon in rows.items():
+            print(f"  {strategy}")
+            for epsilon, stats in per_epsilon.items():
+                held = "ok " if stats["risk_realised_error"]["mean"] <= float(epsilon) else "OVER"
+                print(f"    eps={epsilon:<5} realised {stats['risk_realised_error']['mean']:.4f} "
+                      f"[{held}]  isr {stats['isr']['mean']:.3f}  "
+                      f"coverage {stats['risk_coverage']['mean']:.3f}")
+    return out
+
+
+def exp_churn(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Producers that move. The setting where feedback is the only signal.
+
+    A relocation changes the right answer without changing any similarity
+    score, so re-encoding cannot detect it. Only a producer's refusal can.
+    """
+    intervals = (0.0, 10.0, 5.0, 2.0, 1.0)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        for strategy in ("saf+es", "gs-ndn", "gs-ndn-no-verify", "rc-ndn"):
+            per_interval = {}
+            for interval in intervals:
+                config = base_config(
+                    domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                    churn=ChurnConfig(interval_s=interval),
+                )
+                per_interval[str(interval)] = aggregate(bench.metrics(config, seeds))
+            rows[strategy] = per_interval
+        out[domain] = rows
+        print(f"\n--- {domain}: producer churn ---")
+        for strategy, per_interval in rows.items():
+            cells = "  ".join(
+                f"{i}s:{s['isr']['mean']:.3f}" for i, s in per_interval.items()
+            )
+            print(f"  {strategy:<18} ISR  {cells}")
+    return out
+
+
+def exp_poisoning(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """A share of routers lies, in both currencies gossip carries."""
+    shares = (0.0, 0.125, 0.25, 0.5)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        for strategy in ("gs-ndn", "gs-ndn-no-verify", "rc-ndn"):
+            per_share = {}
+            for share in shares:
+                config = base_config(
+                    domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                    adversary=AdversaryConfig(compromised_share=share),
+                )
+                per_share[str(share)] = aggregate(bench.metrics(config, seeds))
+            rows[strategy] = per_share
+        out[domain] = rows
+        print(f"\n--- {domain}: compromised routers ---")
+        for strategy, per_share in rows.items():
+            cells = "  ".join(
+                f"{k}:{v['isr']['mean']:.3f}/{v['risk_realised_error']['mean']:.3f}"
+                for k, v in per_share.items()
+            )
+            print(f"  {strategy:<18} ISR/err  {cells}")
+    return out
+
+
+def exp_heterogeneity(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Routers running different encoders in one network.
+
+    Mappings pool across the boundary because a route that served a name serves
+    it however anyone chose to ask. Scores do not: 0.62 from MiniLM and 0.62
+    from a character n-gram model are not the same measurement.
+    """
+    shares = (0.0, 0.25, 0.5)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        for strategy in ("gs-ndn", "rc-ndn"):
+            per_share = {}
+            for share in shares:
+                config = base_config(
+                    domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                    alt_embedding_model="lexical-char35-512",
+                    heterogeneous_share=share,
+                )
+                per_share[str(share)] = aggregate(bench.metrics(config, seeds))
+            rows[strategy] = per_share
+        out[domain] = rows
+        print(f"\n--- {domain}: encoder heterogeneity ---")
+        for strategy, per_share in rows.items():
+            cells = "  ".join(
+                f"{k}:{v['isr']['mean']:.3f}" for k, v in per_share.items()
+            )
+            print(f"  {strategy:<10} ISR  {cells}")
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
+    "risk": exp_risk,
+    "churn": exp_churn,
+    "poisoning": exp_poisoning,
+    "heterogeneity": exp_heterogeneity,
     "main": exp_main,
     "threshold": exp_threshold,
     "rate": exp_rate,

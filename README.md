@@ -1,97 +1,111 @@
-# GS-NDN — Gossip-based Semantic Named Data Networking
+# Risk-Controlled Semantic Forwarding in NDN
 
-Semantic routing in NDN: when a client asks for `/hospital/temp-sensor/room-101`
-and the network only knows `/smart-hospital/building-a/floor-1/temperature/room-101`,
-exact-match forwarding drops the request. Embedding the name and matching it by
-cosine similarity fixes that, at the cost of running a transformer in the
-forwarding path.
+When a client asks for `/hospital/temp-sensor/room-101` and the network only
+knows `/smart-hospital/building-a/floor-1/temperature/room-101`, exact-match
+forwarding drops the request. Embedding the name and matching it by cosine
+similarity fixes that — at the cost of running a transformer in the forwarding
+path, and of deciding how similar is similar enough.
 
-This repository asks what that cost really is, and what to do about it.
+That second cost is the one nobody has paid properly. Existing work picks a
+similarity threshold by tuning it on one catalog. This work replaces the
+threshold with an error budget the network holds itself to.
 
 **Authors:** Mohammad Mahdi Yari, Sajjad Taghizadeh · **Advisor:** Dr. Mohammadreza Shakournia
 
 ---
 
-## The short version
+## The argument
 
-Three things came out of measuring rather than assuming.
+**A tuned threshold does not transfer.** SAF selects 0.7 on its own catalog. On
+the two catalogs here that setting gives recall of 0.66 and 0.50, while the best
+operating points sit at 0.55 and 0.45 — different from SAF's and different from
+each other. A threshold is a property of the catalog it was tuned on.
 
-**The encoder is the whole cost; the search is nothing.** On this machine one
-MiniLM-L6 inference takes 7.05 ms single-threaded, while a cosine search over a
-50-entry FIB takes 0.0019 ms — a factor of 3,700. Approximate nearest-neighbour
-indexes, hash-based lookup and every other way of speeding up the *search* are
-optimising a rounding error. The only quantity worth reducing is how often the
-encoder runs at all.
+**One number cannot serve every route anyway.** Some services sit alone in
+embedding space and a loose score is safe; others have five near-identical
+siblings and a high score is still a coin flip. A single cutoff is
+simultaneously too strict for the first and too permissive for the second.
 
-**Locality-sensitive hashing cannot route.** Picking the nearest FIB entry by
-Hamming distance over signatures agrees with the true cosine argmax 33% of the
-time at 64 bits and 84% at 1024. Service names within one domain differ in a
-single component out of five, and LSH does not have the resolution to separate
-them. Signatures are kept here for gossip digests — 32 bytes against a 1.5 KB
-embedding — and never for choosing a route.
+**The labels are free.** Every semantic forwarding decision is an experiment the
+network answers: Data comes back when the producer recognises the request, a
+Nack when it does not. That is exactly a calibration set, produced as a
+by-product of forwarding. Verified semantic caching for LLM prompts needs a
+judge model to obtain the same signal, which is expensive enough to be the thing
+you were avoiding.
 
-**A per-router cache stops paying as the network grows.** SAF's Embedding Store
-is highly effective at one router, where it sees the whole request stream. Split
-the same traffic across 16 edge routers and each cache sees a thinner slice of
-it, so the network runs 60% more inferences for no more traffic. Sharing what
-each router proves restores that: GS-NDN's cost rises 10% over the same range,
-and at 16 edge routers it needs 28% fewer inferences than SAF+ES and 54% fewer
-than SAF. Both effects replicate on two independent domains.
+So: **the operator sets an error budget ε instead of a threshold**, each route
+learns its own decision boundary from observed outcomes, and routers pool their
+evidence by gossip because no single router sees enough of it alone.
 
-Under load the two cached strategies are indistinguishable, and that result
-belongs to SAF rather than to us: at 300 Interests/s through a single access
-router SAF's tail latency reaches 172 ms while both cached strategies sit near
-82 ms. Caching fixes latency at one router; sharing fixes cost across many.
+## What comes out
 
-Full numbers, including where the approach does *not* help, are in
-[`RESULTS.md`](RESULTS.md).
+The budget holds. Measured out of sample, over exactly the decisions it governs:
 
----
+| ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| realised error | 0.006 | 0.006 | 0.010 | 0.008 | 0.015 | 0.020 | 0.029 |
+| satisfaction | 0.827 | 0.827 | 0.853 | 0.903 | 0.926 | 0.960 | 0.968 |
 
-## What is actually new here
+At ε = 0.2 this beats a tuned-threshold GS-NDN on **both** axes at once —
+satisfaction 0.946 against 0.933, realised error 0.0074 against 0.0189 — with
+nothing to tune.
 
-Two mechanisms, and an explicit note on what is inherited.
+**Risk control alone deadlocks.** A boundary set too high blocks exactly the
+decisions that would produce the evidence to lower it, so the system stops
+forwarding, stops learning, and stays there: left unexplored at ε = 0.05 it
+settles at refuse-everything on 104 observations. Spending 5% of refused
+decisions on evidence gathers 476 and reaches 0.859. This is a property of
+learning from your own choices, not an implementation fault, and it is why
+gossip matters — pooled evidence means each router explores less.
 
-**Verification.** A semantic match is a guess. A producer that receives a
-resolved Interest can see both the rewritten name and the client's original
-wording, and can tell whether the request is for one of its services. When it
-refuses, the router drops the mapping *and remembers which prefix failed*, so
-the next attempt excludes it — an encoder is deterministic, and without that
-exclusion a retry returns the same wrong answer. SAF caches on resolution and
-never learns that the route it chose does not work.
+Two further results, both in [`RESULTS.md`](RESULTS.md):
 
-**Sharing.** Only mappings a producer has actually served are gossiped, by
-anti-entropy with per-peer version watermarks plus immediate rumour pushes.
-Because nothing unproven travels, a permissive similarity threshold stops being
-dangerous: mistakes are retracted locally before anyone else hears about them.
+- **Encoder cost is the only cost.** One MiniLM-L6 inference takes 7.05 ms; a
+  cosine search over a 50-entry FIB takes 0.0019 ms. Every scheme for speeding
+  up the *search* optimises a rounding error.
+- **Locality-sensitive hashing cannot route.** Nearest-by-Hamming agrees with
+  the true cosine argmax 33% of the time at 64 bits, 84% at 1024. Signatures are
+  kept for gossip digests and never for choosing a route.
+
+## Honesty about what is new
 
 **Not ours: edge tagging.** Attaching the resolved prefix to the Interest so
-that later hops skip the encoder is SAF's mechanism — the paper prepends it with
-a `|` delimiter. It is implemented here because without it the producer never
-sees a name it serves, but it is not claimed as a contribution.
+later hops skip the encoder is SAF's mechanism.
 
----
+**Not ours: the shape of the idea.** Learning per-item boundaries against an
+error bound instead of a fixed threshold is what
+[vCache](https://arxiv.org/abs/2502.03771) does for LLM prompt caching, and
+pooling calibration across parties is
+[federated conformal prediction](https://arxiv.org/abs/2305.17564).
+
+**Ours:** that a forwarding plane generates its own calibration labels for free,
+that per-route budgets can therefore be held online without a coordinator, that
+doing so deadlocks without controlled exploration, and that mappings and scores
+have different portability — a route that served a name serves it however anyone
+asked, but a score means nothing outside the embedding space that produced it.
 
 ## Layout
 
 ```
 gsndn/
   datasets/      two labelled name catalogs, built from an explicit lexicon
+  admission.py   what a producer knows about its own services
+  risk.py        per-route boundaries from an error budget
+  strategies/    Vanilla NDN, SAF, SAF+ES, SEF, GS-NDN, RC-NDN and ablations
+  gossip.py      anti-entropy over verified mappings and calibration evidence
+  churn.py       producers that depart, return and relocate
+  adversary.py   compromised routers, and how far their lies travel
   embeddings.py  MiniLM via ONNX, precomputed vectors, a lexical control
   des.py         discrete-event kernel with a single-server queue per router
   network.py     routers, links, producers, consumers, packet movement
   tables.py      FIB, PIT, Content Store, LRU Embedding Store
-  strategies/    Vanilla NDN, SAF, SAF+ES, SEF, GS-NDN and its ablations
-  gossip.py      anti-entropy and rumour spreading over verified mappings
   simhash.py     signatures, with their measured limits documented
   energy.py      SEF's radio model, plus the cost of running an encoder
   metrics.py     correctness-aware scoring
   runner.py      assemble a scenario, run it, score it
 experiments/     model fetch, embedding export, microbenchmarks, campaign, figures
-ndnsim/          ns-3 cross-validation of the transport layer, and its comparison script
+ndnsim/          ns-3 cross-validation of the transport layer
 tests/           36 tests, most guarding a specific mistake made while building this
-data/            exported embeddings and the measured cost model
-results/         campaign output and figures
 ```
 
 ## Running it
@@ -99,65 +113,54 @@ results/         campaign output and figures
 ```bash
 pip install -r requirements.txt
 
-# One-time: fetch the MiniLM ONNX graph (~80 MB, cached outside the repo)
-python experiments/fetch_model.py
+python experiments/fetch_model.py                                # ~80 MB, cached outside the repo
+python experiments/export_embeddings.py --all                    # encode every catalog name once
+python experiments/export_embeddings.py --all --backend lexical  # the no-transformer control
+python experiments/bench_micro.py                                # measure this machine's costs
 
-# Encode every catalog name once; the simulator reads these, not the model
-python experiments/export_embeddings.py --all
-python experiments/export_embeddings.py --all --backend lexical
-
-# Measure this machine's operation costs; without it, latencies are assumed
-python experiments/bench_micro.py
-
-# Run the campaign and draw the figures
 python experiments/run_experiments.py --all --seeds 20
 python experiments/make_figures.py
-
 python -m pytest tests/ -q
 ```
 
-To cross-check the transport model against a real NDN stack, see
-[`ndnsim/README.md`](ndnsim/README.md). On the same topology and load the two
-agree on median round-trip time to within 0.11 ms once the producer service time
-this model charges — and ndnSIM does not — is accounted for.
-
-Encoding is separated from simulation deliberately. It mirrors the deployment,
-where FIB-entry embeddings are computed when routes are installed rather than
-per Interest, and it means every reported number can be reproduced without a
-model download or a GPU.
+Encoding is separated from simulation deliberately: it mirrors the deployment,
+where FIB-entry embeddings are computed when routes are installed, and it means
+every reported number reproduces without a model download or a GPU. The
+transport model is cross-checked against ndnSIM — median round-trip times agree
+to within 0.11 ms once the producer service time this model charges is
+accounted for. See [`ndnsim/README.md`](ndnsim/README.md).
 
 ## How to read the results honestly
 
-A few things are worth knowing before trusting any of it.
+*Producer feedback is modelled, not assumed.* Each producer declares the terms
+it answers to and the instance it serves, and decides on that alone — never on
+the catalog's ground truth. Declarations are deliberately incomplete: at
+`alias_coverage=0.7` a producer refuses 29% of requests genuinely meant for it,
+and satisfaction falls from 0.936 to 0.879 as coverage drops to 0.5. The
+feedback channel is informative, not correct.
 
-*Producer-side verification is a modelling assumption.* The simulation decides
-whether a producer serves a request using the catalog's ground truth, standing
-in for a producer that recognises requests for its own services. Without some
-such local check, a resolution that lands on the wrong producer is
-indistinguishable from one that lands on the right one, and no feedback
-mechanism could separate them.
+*Exploration is a real cost.* The 5% of refused decisions spent on evidence are
+decisions the budget explicitly did not cover, and they are counted separately
+rather than folded into the reported rate.
+
+*Poisoning degrades gracefully; it is not prevented.* Against a persistent
+attacker re-injecting every gossip round, retraction does not contain the
+attack — satisfaction falls from 0.933 to 0.750 at 50% compromise. What limits
+the damage is that a router's own confirmed mappings outrank anything it is
+told. Provenance and reputation are left as future work.
 
 *Gossip loses when there is nobody to share with.* On a single edge router it is
-a net cost, and the scaling figure shows it. The benefit appears from roughly
-four edge routers upward.
-
-*Latency differences need load.* Spread across several edge routers, the same
-total offered load leaves each far from saturation and every strategy looks
-alike. The latency experiment therefore uses SAF's own single-router topology,
-which is where its bottleneck is.
-
-*The threshold does not transfer.* SAF's Th = 0.7 gives recall of 0.66 on the
-hospital catalog and 0.50 on the city one; best F1 sits nearer 0.55–0.60 on
-both. Any comparison at a fixed threshold is a comparison at somebody's
-operating point, not at the best one.
+a net cost; the benefit appears from about four edge routers upward.
 
 ## Sources
 
 - Amadeo et al., *Enhancing IoT Service Discovery Through Semantic Name-Based
   Forwarding*, IEEE Internet of Things Magazine, 2026 — SAF, the Embedding
-  Store, Th = 0.7, and the single-router evaluation whose topology we extend.
-- Raza et al., *INF-NDN IoT*, IEEE Access, 2024 — NLP name optimisation and
-  LDA semantic tags, distributed through a central Principal Node.
-- Askar et al., *SEF: A Smart and Energy-Aware Forwarding Strategy for
-  NDN-Based Internet of Healthcare*, CMC, 2024 — the energy model and the
-  20-seed evaluation protocol used here.
+  Store, Th = 0.7, and the single-router evaluation this work extends.
+- Raza et al., *INF-NDN IoT*, IEEE Access, 2024 — LDA semantic tags,
+  distributed through a central Principal Node.
+- Askar et al., *SEF*, CMC, 2024 — the energy model and the 20-seed protocol.
+- Chan et al., *Fuzzy Interest Forwarding*, 2017 — Word2Vec component matching,
+  applied at both Content Store and FIB.
+- Zhu et al., *vCache: Verified Semantic Prompt Caching*, 2025.
+- Lu et al., *Federated Conformal Predictors*, ICML 2023.

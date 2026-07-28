@@ -13,10 +13,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from . import datasets, topology as topo
+from .datasets import VARIANT
 from .costs import CostModel, LinkProfile
 from .des import Simulator
 from .embeddings import EmbeddingBackend, NameIndex, PrecomputedBackend
 from .energy import EnergyLedger, EnergyModel, charge_network
+from .adversary import Adversary, AdversaryConfig
+from .churn import ChurnConfig, ChurnDriver
 from .gossip import GossipProtocol
 from .metrics import Collector, convergence_curve, summarise
 from .network import Router
@@ -62,6 +65,8 @@ class ScenarioConfig:
 
     workload: WorkloadConfig = field(default_factory=WorkloadConfig)
     links: LinkProfile = field(default_factory=LinkProfile)
+    churn: ChurnConfig = field(default_factory=ChurnConfig)
+    adversary: AdversaryConfig = field(default_factory=AdversaryConfig)
 
     gossip_interval_ms: float = 500.0
     gossip_fanout: int = 2
@@ -69,6 +74,11 @@ class ScenarioConfig:
     gossip_rumour_push: bool = True
 
     embedding_model: str = "all-MiniLM-L6-v2-onnx"
+    #: A second encoder, given to ``heterogeneous_share`` of the routers. Scores
+    #: from two embedding spaces are not comparable, so this is what forces the
+    #: distinction between what gossip can pool and what it cannot.
+    alt_embedding_model: Optional[str] = None
+    heterogeneous_share: float = 0.0
     bundle_dir: Optional[Path] = None
     costs_path: Optional[Path] = None
 
@@ -79,7 +89,12 @@ class ScenarioConfig:
         return Path(directory) / f"{self.domain}.{self.embedding_model}.npz"
 
     def with_seed(self, seed: int) -> "ScenarioConfig":
-        return replace(self, seed=seed, workload=replace(self.workload, seed=seed))
+        return replace(
+            self, seed=seed,
+            workload=replace(self.workload, seed=seed),
+            churn=replace(self.churn, seed=seed),
+            adversary=replace(self.adversary, seed=seed),
+        )
 
 
 @dataclass
@@ -150,6 +165,13 @@ def run_once(
     # the index once and sharing it matches the deployment, where embeddings are
     # computed when a route is installed rather than per Interest.
     index = NameIndex(backend, catalog.canonical_names)
+    alt_index = None
+    if config.alt_embedding_model and config.heterogeneous_share > 0.0:
+        alt_backend = PrecomputedBackend(
+            (config.bundle_dir or DEFAULT_BUNDLE_DIR)
+            / f"{config.domain}.{config.alt_embedding_model}.npz"
+        )
+        alt_index = NameIndex(alt_backend, catalog.canonical_names)
 
     strategy = build_strategy(
         config.strategy, threshold=config.threshold, costs=costs, seed=config.seed,
@@ -169,9 +191,13 @@ def run_once(
         )
         gossip.attach()
 
-    for router in topology.routers:
+    routers = topology.routers
+    # Deterministic assignment by position, so which routers run which encoder
+    # is a property of the scenario rather than of iteration order.
+    n_alt = int(round(len(routers) * config.heterogeneous_share)) if alt_index else 0
+    for position, router in enumerate(routers):
         router.strategy = strategy
-        router.name_index = index
+        router.name_index = alt_index if position < n_alt else index
         router.gossip_protocol = gossip
         strategy.attach(router)
 
@@ -197,11 +223,21 @@ def run_once(
             request.kind,
         )
 
+    churn = ChurnDriver(topology, sim, config.churn)
+    adversary = Adversary(
+        topology, gossip, config.adversary,
+        interval_ms=config.gossip_interval_ms,
+        targets=[i.name for i in catalog.by_kind(VARIANT)],
+    )
     if gossip is not None:
         gossip.start()
+    churn.start()
+    adversary.start()
 
     horizon = config.workload.duration_ms + config.links.interest_lifetime_ms * 2
     sim.run(until=horizon)
+    adversary.stop()
+    churn.stop()
     if gossip is not None:
         gossip.stop()
 
@@ -220,6 +256,8 @@ def run_once(
 
     gossip_report = gossip.report() if gossip is not None else {}
     metrics.update(gossip_report)
+    metrics.update(churn.report())
+    metrics.update(adversary.audit())
 
     return RunResult(
         config=config,
