@@ -52,6 +52,13 @@ MIN_OBSERVATIONS = 8
 #: moves when routes churn, and because a router cannot store history forever.
 WINDOW = 256
 
+#: Range the adaptive budget is allowed to move in. The floor stops a run of bad
+#: luck from driving the effective budget to zero, which would be the deadlock of
+#: section 5 arrived at by a different route; the ceiling stops a long clean
+#: stretch from inflating it past anything an operator would have asked for.
+ACI_EPSILON_MIN = 0.001
+ACI_EPSILON_MAX = 0.6
+
 
 @dataclass(frozen=True)
 class Observation:
@@ -177,6 +184,37 @@ class RiskController:
     prior: float = 0.6
     confidence: float = 0.9
     window: int = WINDOW
+
+    #: Adaptive Conformal Inference (Gibbs & Candès, NeurIPS 2021). Off by
+    #: default, in which case ``epsilon`` is exactly the operator's number and
+    #: never moves.
+    #:
+    #: The fixed-epsilon controller assumes exchangeability: that the decisions
+    #: it calibrated on and the decisions it now faces come from the same
+    #: distribution. Producer churn and schema drift break that assumption
+    #: directly, and section 14 has been listing "a weighted or adaptive variant
+    #: would be the principled fix" as unimplemented. This is that variant.
+    #:
+    #: Instead of holding epsilon fixed and hoping the calibration transfers, the
+    #: controller tracks an effective budget that reacts to realised coverage:
+    #:
+    #:     eps_{t+1} = eps_t + gamma * (eps_target - err_t)
+    #:
+    #: with ``err_t`` the miscoverage indicator of the decision just judged --
+    #: one if the producer refused, zero if it answered. A wrong decision pushes
+    #: the effective budget down, which raises the boundary and makes the router
+    #: stricter; a clean stretch lets it drift back up towards the target. The
+    #: guarantee it buys is different in kind from the fixed version's: not "at
+    #: most eps of decisions were wrong" on any finite run, but that the
+    #: long-run realised rate tracks the target even when the distribution moves
+    #: under it.
+    adaptive: bool = False
+    #: Step size. Larger reacts faster and oscillates more.
+    adapt_rate: float = 0.05
+    #: The operator's number, which ``epsilon`` drifts around under adaptation.
+    epsilon_target: Optional[float] = None
+    adapt_steps: int = 0
+    _epsilon_sum: float = 0.0
     #: Shrinkage constant: how much route-local evidence is worth half the pool.
     shrinkage: float = float(MIN_OBSERVATIONS)
 
@@ -206,6 +244,33 @@ class RiskController:
     decisions_blocked: int = 0
     decisions_explored: int = 0
     _explore_counter: int = 0
+
+    def __post_init__(self) -> None:
+        if self.epsilon_target is None:
+            self.epsilon_target = self.epsilon
+
+    # -- adaptive budget --------------------------------------------------
+
+    def adapt(self, err: float) -> float:
+        """One Adaptive Conformal Inference step. Returns the new budget.
+
+        ``err`` is the miscoverage signal for the decision just judged: 1.0 if it
+        turned out wrong, 0.0 if right. Passing a rate rather than an indicator
+        works identically and is what the unit test uses to check the direction
+        of movement without simulating a stream.
+
+        Kept public and free of any router state so the update rule can be tested
+        as arithmetic, which is the only part of this that is a claim about a
+        published method rather than about our system.
+        """
+        target = self.epsilon_target if self.epsilon_target is not None else self.epsilon
+        moved = self.epsilon + self.adapt_rate * (target - err)
+        self.epsilon = min(ACI_EPSILON_MAX, max(ACI_EPSILON_MIN, moved))
+        self.adapt_steps += 1
+        self._epsilon_sum += self.epsilon
+        # Every boundary is a function of epsilon, so all of them just moved.
+        self._cache.clear()
+        return self.epsilon
 
     def global_boundary(self) -> float:
         """The pooled boundary every route starts from."""
@@ -256,6 +321,15 @@ class RiskController:
         return False, False
 
     def observe(self, prefix: str, observation: Observation) -> None:
+        if self.adaptive:
+            # Adapt only on decisions the boundary in force actually covered.
+            # An exploratory forward below the boundary is a decision the budget
+            # explicitly did not cover -- section 5 counts those separately, and
+            # feeding them into the coverage signal would make the controller
+            # punish itself for the evidence-gathering it needs.
+            if observation.score >= self.boundary_for(prefix):
+                self.adapt(0.0 if observation.correct else 1.0)
+
         calibrator = self.routes.get(prefix)
         if calibrator is None:
             calibrator = RouteCalibrator(prefix=prefix, window=self.window)
@@ -330,6 +404,13 @@ class RiskController:
         spread = self.boundary_spread()
         return {
             "risk_epsilon": self.epsilon,
+            "risk_epsilon_target": (
+                self.epsilon_target if self.epsilon_target is not None else self.epsilon
+            ),
+            "risk_epsilon_mean": (
+                self._epsilon_sum / self.adapt_steps if self.adapt_steps else self.epsilon
+            ),
+            "risk_adapt_steps": self.adapt_steps,
             "risk_routes_tracked": len(self.routes),
             "risk_routes_calibrated": spread.get("n", 0),
             "risk_observations_local": self.observations_local,

@@ -64,6 +64,9 @@ class RiskControlledNdn(GsNdn):
         verify: bool = True,
         gossip: bool = True,
         share_evidence: bool = True,
+        adaptive: bool = False,
+        adapt_rate: float = 0.05,
+        mix_across_encoders: bool = False,
     ) -> None:
         # The threshold survives only as the prior for routes with no evidence,
         # which is what makes this strictly a superset of the fixed-threshold
@@ -73,13 +76,17 @@ class RiskControlledNdn(GsNdn):
         #: Whether calibration observations travel between routers. Off for the
         #: ablation that separates sharing answers from sharing evidence.
         self.share_evidence = share_evidence
+        #: Pool scores across an encoder boundary anyway. Wrong by construction
+        #: -- two encoders' cosine scores are different measurements -- and here
+        #: only so that refusing to pool has something to be measured against.
+        self.mix_across_encoders = mix_across_encoders
 
         #: One controller per router: boundaries are local state, even when the
         #: evidence behind them came from elsewhere.
         self.controllers: dict[str, RiskController] = {}
         self._defaults = dict(
             epsilon=epsilon, prior=threshold, confidence=confidence,
-            explore_rate=explore_rate,
+            explore_rate=explore_rate, adaptive=adaptive, adapt_rate=adapt_rate,
         )
         self.blocked_by_risk = 0
         self.explorations = 0

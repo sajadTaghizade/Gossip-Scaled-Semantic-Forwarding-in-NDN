@@ -62,6 +62,8 @@ class ScenarioConfig:
     risk_confidence: float = 0.9
     #: Share of budget-refused decisions forwarded anyway, to keep learning.
     explore_rate: float = 0.05
+    #: Step size for the adaptive budget, used only by ``rc-ndn-aci``.
+    adapt_rate: float = 0.05
 
     workload: WorkloadConfig = field(default_factory=WorkloadConfig)
     links: LinkProfile = field(default_factory=LinkProfile)
@@ -176,7 +178,7 @@ def run_once(
     strategy = build_strategy(
         config.strategy, threshold=config.threshold, costs=costs, seed=config.seed,
         epsilon=config.epsilon, confidence=config.risk_confidence,
-        explore_rate=config.explore_rate,
+        explore_rate=config.explore_rate, adapt_rate=config.adapt_rate,
     )
     gossip: Optional[GossipProtocol] = None
     if getattr(strategy, "gossip", False):
@@ -249,6 +251,7 @@ def run_once(
 
     metrics = summarise(collector)
     metrics.update(_router_metrics(topology.routers, sim.now))
+    metrics.update(_producer_metrics(topology))
     ledger = charge_network(
         topology.network, EnergyLedger(EnergyModel()), config.workload.duration_ms
     )
@@ -301,6 +304,29 @@ def _one_router(router: Router, now: float) -> Dict[str, float]:
         "es_evictions": router.es.evictions,
         "bytes_tx": router.bytes_tx,
         "bytes_rx": router.bytes_rx,
+    }
+
+
+def _producer_metrics(topology) -> Dict[str, float]:
+    """What the producers saw, which is where wasted forwarding shows up.
+
+    An Interest a producer refuses cost a full round trip and produced nothing.
+    On a static network that is just the price of a wrong guess, but when a
+    producer's declared schema narrows under it, the count of refusals is the
+    direct measure of how long each strategy keeps sending Interests to a route
+    that has quietly stopped serving them -- and the routing plane, which sees no
+    event at all, cannot report it.
+    """
+    refused = served = 0
+    for producer_id in topology.producers:
+        producer = topology.network.nodes[producer_id]
+        refused += getattr(producer, "refused", 0)
+        served += getattr(producer, "served", 0)
+    total = refused + served
+    return {
+        "producer_refusals": refused,
+        "producer_served": served,
+        "producer_refusal_rate": refused / total if total else 0.0,
     }
 
 

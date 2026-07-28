@@ -24,6 +24,11 @@ STRATEGIES = (
     # Risk-controlled forwarding and its own ablations: no shared evidence
     # (each router calibrates alone) and no mapping gossip.
     "rc-ndn",
+    # The same controller with an adaptive rather than fixed budget.
+    "rc-ndn-aci",
+    # ... and the same controller with the cross-encoder guard removed, as the
+    # naive baseline the heterogeneity result is measured against.
+    "rc-ndn-naive-mix",
     "rc-ndn-no-evidence",
     "rc-ndn-no-gossip",
     "rc-ndn-no-explore",
@@ -39,6 +44,7 @@ def build_strategy(
     epsilon: float = 0.05,
     confidence: float = 0.9,
     explore_rate: float = 0.05,
+    adapt_rate: float = 0.05,
 ) -> ForwardingStrategy:
     """Instantiate a strategy by registry key."""
     if name == "vanilla-ndn":
@@ -60,6 +66,27 @@ def build_strategy(
             threshold, costs, epsilon=epsilon, confidence=confidence,
             explore_rate=explore_rate,
         )
+    if name == "rc-ndn-aci":
+        # Adaptive Conformal Inference: the budget itself moves in response to
+        # realised coverage, so a distribution that shifts under the controller
+        # is answered rather than assumed away.
+        strategy = RiskControlledNdn(
+            threshold, costs, epsilon=epsilon, confidence=confidence,
+            explore_rate=explore_rate, adaptive=True, adapt_rate=adapt_rate,
+        )
+        strategy.name = "rc-ndn-aci"
+        return strategy
+    if name == "rc-ndn-naive-mix":
+        # The naive baseline for the heterogeneity experiment: gossip evidence
+        # across an encoder boundary as though a MiniLM 0.62 and an n-gram 0.62
+        # were the same number. Note this has to be a risk-controlled arm --
+        # gs-ndn gossips no scores at all, so there is nothing for it to mix.
+        strategy = RiskControlledNdn(
+            threshold, costs, epsilon=epsilon, confidence=confidence,
+            explore_rate=explore_rate, mix_across_encoders=True,
+        )
+        strategy.name = "rc-ndn-naive-mix"
+        return strategy
     if name == "rc-ndn-no-explore":
         return RiskControlledNdn(
             threshold, costs, epsilon=epsilon, confidence=confidence, explore_rate=0.0
