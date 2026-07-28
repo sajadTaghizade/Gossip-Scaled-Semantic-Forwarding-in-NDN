@@ -123,24 +123,24 @@ moved to. Same configuration as the sweep above, twenty seeds
 
 **Tuned on city, evaluated on hospital:**
 
-| ε | 0.02 | 0.05 | 0.10 | 0.20 | 0.30 | 0.40 |
-|---|---:|---:|---:|---:|---:|---:|
-| threshold chosen on city | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 |
-| its realised error on hospital | **0.032** | 0.032 | 0.032 | 0.032 | 0.032 | 0.032 |
-| within budget | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ |
-| its satisfaction | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 |
-| rc-ndn realised error | 0.009 | 0.009 | 0.009 | 0.014 | 0.025 | 0.035 |
-| rc-ndn satisfaction | 0.818 | 0.818 | 0.841 | 0.919 | 0.959 | 0.967 |
+| ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| threshold chosen on city | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 |
+| its realised error on hospital | **0.032** | 0.032 | 0.032 | 0.032 | 0.032 | 0.032 | 0.032 |
+| within budget | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| its satisfaction | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 |
+| rc-ndn realised error | 0.009 | 0.009 | 0.009 | 0.010 | 0.014 | 0.025 | 0.035 |
+| rc-ndn satisfaction | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | 0.959 | 0.967 |
 
 **Tuned on hospital, evaluated on city:**
 
-| ε | 0.02 | 0.05 | 0.10 | 0.20 | 0.30 | 0.40 |
-|---|---:|---:|---:|---:|---:|---:|
-| threshold chosen on hospital | 0.70 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 |
-| its realised error on city | 0.003 | 0.011 | 0.011 | 0.011 | 0.011 | 0.011 |
-| its satisfaction | 0.804 | 0.983 | 0.983 | 0.983 | 0.983 | 0.983 |
-| rc-ndn realised error | 0.010 | 0.010 | 0.011 | 0.012 | 0.016 | 0.020 |
-| rc-ndn satisfaction | 0.813 | 0.813 | 0.845 | 0.956 | 0.977 | 0.979 |
+| ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| threshold chosen on hospital | 0.70 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 |
+| its realised error on city | 0.003 | 0.011 | 0.011 | 0.011 | 0.011 | 0.011 | 0.011 |
+| its satisfaction | 0.804 | 0.983 | 0.983 | 0.983 | 0.983 | 0.983 | 0.983 |
+| rc-ndn realised error | 0.010 | 0.010 | 0.011 | 0.009 | 0.012 | 0.016 | 0.020 |
+| rc-ndn satisfaction | 0.813 | 0.813 | 0.845 | 0.916 | 0.956 | 0.977 | 0.979 |
 
 **rc-ndn does not dominate the transferred frontier, and the earlier claim of
 better efficiency is withdrawn.** Across the fourteen comparisons -- seven
@@ -154,8 +154,9 @@ Two things survive, and they are worth less than the withdrawn claim.
 
 *The transferred threshold missed the budget once, and it was the tightest one.*
 Tuned on city at ε = 0.02, 0.45 realises 0.011 there and 0.032 on hospital --
-over budget by 61%, with the confidence interval (±0.009) nowhere near covering
-the gap. rc-ndn held its budget in all fourteen. One violation in fourteen is a
+over budget by 61%, and the miss is resolved rather than borderline: the
+interval is ±0.009, so even its lower end, 0.023, sits above the 0.020 it was
+asked for. rc-ndn held its budget in all fourteen. One violation in fourteen is a
 weak result and is reported as one; what makes it worth reporting at all is
 where it landed. Every budget from 0.05 up is slack -- no threshold in the sweep
 realises more than 0.032 error on either domain -- so "tuning" degenerates to
@@ -289,16 +290,21 @@ twenty seeds, differences against GS-NDN without verification):
 | SAF+ES, hospital | −0.0000 ± 0.0002 | +0.0001 ± 0.0002 | 6 / 20 |
 | Risk-controlled, hospital | −0.0252 ± 0.0085 | −0.0361 ± 0.0082 | 0 / 20 |
 
-**Verification pays here, and it is the only setting in this paper where it
-does.** Under relocation GS-NDN and GS-NDN-without-verification are
-indistinguishable at one second — 0.380 against 0.380. Under schema drift the
-same pair separates on twenty seeds out of twenty on hospital and nineteen of
-twenty on city, both in satisfaction and in refusals avoided. The effect is
-genuinely small — half a point of satisfaction, 8% fewer wasted round trips —
-and it is the mechanism working exactly as argued rather than a large win.
+**What drift restores is verification's advantage, which relocation erases.**
+The advantage over not verifying is +0.0080 satisfaction on a static hospital
+network — the 0.8 points the ablation already reports. Under relocation at one
+second it is +0.0005: gone, because the route withdrawal destroyed the mapping
+first. Under schema drift at one second it is **+0.0052 ± 0.0013, on twenty
+seeds out of twenty**, with 8% fewer Interests wasted on a producer that will
+refuse; city gives +0.0101 ± 0.0036 on nineteen of twenty and 14% fewer. So
+drift keeps about two thirds of the static advantage under a churn rate that
+otherwise destroys it, and the claim this experiment can support is that
+**feedback survives an event nothing else can see** — not that churn is where
+verification finally becomes large. It does not become large anywhere.
+
 SAF+ES lands on top of GS-NDN-without-verification to four decimal places, which
-is the sanity check: both cache on resolution and neither retracts, so they
-should be the same system under this event, and they are.
+is the sanity check the arm needed: both cache on resolution and neither
+retracts, so under this event they are the same system, and they measure as it.
 
 The risk controller trades in the other direction, and hard: 36% fewer refused
 Interests than SAF+ES at one second (0.066 against 0.103) for two and a half
@@ -338,7 +344,7 @@ identical seeds, schema drift at one second:
 | hospital | +0.0091 ± 0.0046 | +0.0045 ± 0.0029 | 17 / 20 |
 | city | +0.0007 ± 0.0055 | +0.0017 ± 0.0025 | **10 / 20** |
 
-Under nine tenths of a point of satisfaction on hospital, resolved but tiny, and
+Nine tenths of a point of satisfaction on hospital — resolved, but tiny, and
 paid for with slightly more wasted round trips. On city it is a coin flip — ten
 seeds out of twenty, an interval eight times the effect. **Adaptation does not
 give a consistent edge over a static budget under drift, and this is reported as
@@ -350,7 +356,7 @@ interesting finding.** Route withdrawals destroy the mappings before they can be
 refuted (above), so the decisions that survive to be judged are mostly correct,
 and the update rule reads a clean stretch and loosens. At one second between
 relocations the effective budget has climbed to 0.364 on hospital and 0.501 on
-city — past the ceiling of the range an operator would have swept. Realised error
+city, the latter past the top of the range section 4 sweeps at all. Realised error
 rises with it, 0.017 → 0.027 on hospital, and stays far inside 0.2 only because
 this catalog cannot produce much error at any setting. **The number the operator
 set has stopped being the number in force**, and nothing in the mechanism
