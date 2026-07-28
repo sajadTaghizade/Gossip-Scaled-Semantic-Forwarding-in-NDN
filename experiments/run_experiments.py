@@ -12,6 +12,9 @@ Experiments:
 
 ``main``        every strategy on both domains, one operating point
 ``threshold``   precision and recall against the similarity threshold
+``threshold_transfer``
+                a fixed threshold tuned on one domain, evaluated on the other,
+                against a risk controller calibrating live on that other domain
 ``rate``        latency against offered load, where queueing appears
 ``scaling``     encoder cost against the number of edge routers
 ``convergence`` fast-path share over time, learning alone against being taught
@@ -138,6 +141,161 @@ def exp_threshold(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
                 print(f"    Th={threshold}: precision {stats['precision']['mean']:.3f} "
                       f"recall {stats['recall']['mean']:.3f} f1 {stats['f1']['mean']:.3f}")
     return out
+
+
+#: The fixed-threshold sweep points, shared by ``threshold`` and
+#: ``threshold_transfer`` so the two are reading the same operating points.
+THRESHOLD_POINTS = (0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8)
+
+#: Budgets the risk controller is asked to hold, matched to ``exp_risk`` so the
+#: two experiments' rc-ndn arms are directly comparable.
+EPSILON_POINTS = (0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40)
+
+
+def exp_threshold_transfer(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Does a threshold tuned on one domain still hold its budget on another?
+
+    A fixed cosine threshold traces an efficiency frontier: sweep it and every
+    point is a (realised error, satisfaction) pair, and any operator who can
+    measure realised error on their own catalog can pick the point they want.
+    That is a fair opponent, and section 3's flat precision curve is not an
+    argument against it. The claim that has to be tested is narrower: the
+    threshold is chosen on the catalog available at tuning time, and the network
+    it runs on is not that catalog.
+
+    So the comparison here is deliberately transitional. The frontier is built on
+    domain A -- for each budget, the most permissive threshold whose realised
+    error on A stays inside it -- and then that same threshold is evaluated on
+    domain B, where nobody got to tune. Against it stands rc-ndn given the same
+    budget and run on B from cold, calibrating on B's own traffic.
+
+    Both arms use exactly the configuration ``exp_risk`` uses, so the rc-ndn
+    numbers here and there are the same measurement.
+    """
+    frontier: Dict[str, object] = {}
+    controlled: Dict[str, object] = {}
+
+    for domain in bench.catalogs:
+        per_threshold = {}
+        for threshold in THRESHOLD_POINTS:
+            config = base_config(domain, strategy="gs-ndn", threshold=threshold,
+                                 n_edges=8)
+            per_threshold[str(threshold)] = aggregate(bench.metrics(config, seeds))
+        frontier[domain] = per_threshold
+
+        per_epsilon = {}
+        for epsilon in EPSILON_POINTS:
+            config = base_config(domain, strategy="rc-ndn", epsilon=epsilon, n_edges=8)
+            per_epsilon[str(epsilon)] = aggregate(bench.metrics(config, seeds))
+        controlled[domain] = per_epsilon
+
+        print(f"\n--- {domain}: fixed-threshold frontier ---")
+        for threshold, stats in per_threshold.items():
+            print(f"    Th={threshold:<5} realised {stats['risk_realised_error']['mean']:.4f}"
+                  f"  isr {stats['isr']['mean']:.3f}")
+        print(f"--- {domain}: rc-ndn, live ---")
+        for epsilon, stats in per_epsilon.items():
+            print(f"    eps={epsilon:<5} realised {stats['risk_realised_error']['mean']:.4f}"
+                  f"  isr {stats['isr']['mean']:.3f}")
+
+    transfer = _transfer_analysis(frontier, controlled)
+    for pair, rows in transfer.items():
+        print(f"\n--- transfer: {pair} ---")
+        for row in rows:
+            if row["tuned_threshold"] is None:
+                print(f"    eps={row['epsilon']:<5} no threshold meets this budget on the tuning domain")
+                continue
+            print(
+                f"    eps={row['epsilon']:<5} Th*={row['tuned_threshold']:<5} "
+                f"transferred err {row['transferred_error']:.4f} isr {row['transferred_isr']:.3f} "
+                f"[{'held' if row['transferred_within_budget'] else 'OVER'}]  |  "
+                f"rc-ndn err {row['rc_error']:.4f} isr {row['rc_isr']:.3f}  "
+                f"-> {row['verdict']}"
+            )
+    return {"frontier": frontier, "rc_ndn": controlled, "transfer": transfer}
+
+
+def _tune_threshold(per_threshold: Dict[str, object], epsilon: float):
+    """The most permissive threshold whose realised error stays inside budget.
+
+    Most permissive rather than safest, because that is what an operator tuning
+    on their own catalog would pick: the budget is a constraint, and satisfaction
+    is what they are maximising subject to it. Ties in error are broken by
+    the lower threshold for the same reason.
+    """
+    feasible = [
+        (float(t), stats) for t, stats in per_threshold.items()
+        if stats["risk_realised_error"]["mean"] <= epsilon
+    ]
+    if not feasible:
+        return None, None
+    threshold, stats = min(feasible, key=lambda pair: pair[0])
+    return threshold, stats
+
+
+def _transfer_analysis(
+    frontier: Dict[str, object], controlled: Dict[str, object]
+) -> Dict[str, List[Dict[str, object]]]:
+    """Tune on one domain, evaluate on the other, and score the outcome."""
+    out: Dict[str, List[Dict[str, object]]] = {}
+    domains = list(frontier)
+    for tune in domains:
+        for evaluate in domains:
+            if tune == evaluate:
+                continue
+            rows: List[Dict[str, object]] = []
+            for epsilon in EPSILON_POINTS:
+                threshold, tuned_stats = _tune_threshold(frontier[tune], epsilon)
+                rc = controlled[evaluate][str(epsilon)]
+                row: Dict[str, object] = {
+                    "epsilon": epsilon,
+                    "tuned_threshold": threshold,
+                    "rc_error": rc["risk_realised_error"]["mean"],
+                    "rc_error_ci95": rc["risk_realised_error"]["ci95"],
+                    "rc_isr": rc["isr"]["mean"],
+                    "rc_isr_ci95": rc["isr"]["ci95"],
+                    "rc_within_budget": rc["risk_realised_error"]["mean"] <= epsilon,
+                }
+                if threshold is None:
+                    row.update({
+                        "verdict": "no feasible threshold on tuning domain",
+                    })
+                    rows.append(row)
+                    continue
+
+                evaluated = frontier[evaluate][str(threshold)]
+                row.update({
+                    "tuning_domain_error": tuned_stats["risk_realised_error"]["mean"],
+                    "tuning_domain_isr": tuned_stats["isr"]["mean"],
+                    "transferred_error": evaluated["risk_realised_error"]["mean"],
+                    "transferred_error_ci95": evaluated["risk_realised_error"]["ci95"],
+                    "transferred_isr": evaluated["isr"]["mean"],
+                    "transferred_isr_ci95": evaluated["isr"]["ci95"],
+                    "transferred_within_budget":
+                        evaluated["risk_realised_error"]["mean"] <= epsilon,
+                    "verdict": _verdict(
+                        rc["risk_realised_error"]["mean"], rc["isr"]["mean"],
+                        evaluated["risk_realised_error"]["mean"], evaluated["isr"]["mean"],
+                    ),
+                })
+                rows.append(row)
+            out[f"{tune}->{evaluate}"] = rows
+    return out
+
+
+def _verdict(rc_error: float, rc_isr: float, other_error: float, other_isr: float) -> str:
+    """Where rc-ndn sits relative to the transferred threshold on both axes.
+
+    Stated as dominance rather than as a single score, because the two axes
+    trade against each other and collapsing them would hide which one moved.
+    """
+    better_error = rc_error < other_error
+    better_isr = rc_isr > other_isr
+    if better_error and better_isr:
+        return "rc-ndn dominates"
+    if not better_error and not better_isr:
+        return "transferred threshold dominates"
+    return "neither dominates (trade)"
 
 
 def exp_rate(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
@@ -337,32 +495,67 @@ def exp_risk(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
-def exp_churn(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
-    """Producers that move. The setting where feedback is the only signal.
+CHURN_STRATEGIES = ("saf+es", "gs-ndn", "gs-ndn-no-verify", "rc-ndn", "rc-ndn-aci")
 
-    A relocation changes the right answer without changing any similarity
-    score, so re-encoding cannot detect it. Only a producer's refusal can.
+
+def exp_churn(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Producers that move, and producers that quietly narrow what they answer.
+
+    Two arms, because the first one on its own turned out to answer a different
+    question than it was asked.
+
+    ``move``   the original: departures and relocations. A relocation changes the
+               right answer without changing any similarity score, which is why
+               it was expected to be where feedback earns its cost. It is not,
+               and :mod:`gsndn.churn` now says why -- withdrawing the route also
+               invalidates every Embedding Store entry that pointed at it, so
+               the stale mapping is destroyed by the event rather than caught by
+               anybody, uniformly for every strategy.
+
+    ``drift``  schema drift: no route event at all, no invalidation, no score
+               change. A producer simply stops recognising some of the wordings
+               it used to answer, and a producer's live refusal is the only thing
+               in the system that can notice. This is the arm the original was
+               missing.
+
+    What drift should move is wasted work rather than satisfaction. A wording its
+    producer has stopped answering cannot be satisfied by anyone, so no strategy
+    recovers it; what separates them is how long they keep spending a round trip
+    to be told no. ``producer_refusal_rate`` is that quantity.
     """
     intervals = (0.0, 10.0, 5.0, 2.0, 1.0)
+    arms = {
+        "move": lambda interval: ChurnConfig(interval_s=interval),
+        "drift": lambda interval: ChurnConfig(interval_s=interval, drift_share=1.0),
+    }
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
-        rows: Dict[str, object] = {}
-        for strategy in ("saf+es", "gs-ndn", "gs-ndn-no-verify", "rc-ndn"):
-            per_interval = {}
-            for interval in intervals:
-                config = base_config(
-                    domain, strategy=strategy, epsilon=0.2, n_edges=8,
-                    churn=ChurnConfig(interval_s=interval),
+        per_arm: Dict[str, object] = {}
+        for arm, make_churn in arms.items():
+            rows: Dict[str, object] = {}
+            for strategy in CHURN_STRATEGIES:
+                per_interval = {}
+                for interval in intervals:
+                    config = base_config(
+                        domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                        churn=make_churn(interval),
+                    )
+                    per_interval[str(interval)] = aggregate(bench.metrics(config, seeds))
+                rows[strategy] = per_interval
+            per_arm[arm] = rows
+            print(f"\n--- {domain}: producer churn ({arm}) ---")
+            for strategy, per_interval in rows.items():
+                isr = "  ".join(
+                    f"{i}s:{s['isr']['mean']:.3f}" for i, s in per_interval.items()
                 )
-                per_interval[str(interval)] = aggregate(bench.metrics(config, seeds))
-            rows[strategy] = per_interval
-        out[domain] = rows
-        print(f"\n--- {domain}: producer churn ---")
-        for strategy, per_interval in rows.items():
-            cells = "  ".join(
-                f"{i}s:{s['isr']['mean']:.3f}" for i, s in per_interval.items()
-            )
-            print(f"  {strategy:<18} ISR  {cells}")
+                print(f"  {strategy:<18} ISR      {isr}")
+            for strategy, per_interval in rows.items():
+                refusals = "  ".join(
+                    f"{i}s:{s['producer_refusal_rate']['mean']:.3f}"
+                    for i, s in per_interval.items()
+                )
+                print(f"  {strategy:<18} refused  {refusals}")
+        out[domain] = per_arm
     return out
 
 
@@ -398,12 +591,22 @@ def exp_heterogeneity(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     Mappings pool across the boundary because a route that served a name serves
     it however anyone chose to ask. Scores do not: 0.62 from MiniLM and 0.62
     from a character n-gram model are not the same measurement.
+
+    That argument was previously asserted and not tested: the experiment ran only
+    the arm that refuses to pool, so "graceful degradation" had nothing to be
+    graceful *against*. ``rc-ndn-naive-mix`` is the missing baseline -- the same
+    controller with the guard removed, gossiping scores across the encoder
+    boundary as though they were commensurable.
+
+    It has to be a risk-controlled arm. GS-NDN gossips mappings and no scores at
+    all, so there is nothing for a naive version of it to mix; the guard exists
+    on the evidence path, and only the evidence path can be measured with it off.
     """
     shares = (0.0, 0.25, 0.5)
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows: Dict[str, object] = {}
-        for strategy in ("gs-ndn", "rc-ndn"):
+        for strategy in ("gs-ndn", "rc-ndn", "rc-ndn-naive-mix"):
             per_share = {}
             for share in shares:
                 config = base_config(
@@ -416,10 +619,20 @@ def exp_heterogeneity(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
         out[domain] = rows
         print(f"\n--- {domain}: encoder heterogeneity ---")
         for strategy, per_share in rows.items():
-            cells = "  ".join(
-                f"{k}:{v['isr']['mean']:.3f}" for k, v in per_share.items()
+            isr = "  ".join(f"{k}:{v['isr']['mean']:.3f}" for k, v in per_share.items())
+            print(f"  {strategy:<18} ISR       {isr}")
+        for strategy, per_share in rows.items():
+            err = "  ".join(
+                f"{k}:{v['risk_realised_error']['mean']:.4f}" for k, v in per_share.items()
             )
-            print(f"  {strategy:<10} ISR  {cells}")
+            print(f"  {strategy:<18} realised  {err}")
+        for strategy, per_share in rows.items():
+            evidence = "  ".join(
+                f"{k}:{v['gossip_evidence_dropped_encoder']['mean']:.0f}"
+                f"/{v['gossip_evidence_mixed_encoder']['mean']:.0f}"
+                for k, v in per_share.items()
+            )
+            print(f"  {strategy:<18} dropped/mixed  {evidence}")
     return out
 
 
@@ -430,6 +643,7 @@ EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
     "heterogeneity": exp_heterogeneity,
     "main": exp_main,
     "threshold": exp_threshold,
+    "threshold_transfer": exp_threshold_transfer,
     "rate": exp_rate,
     "scaling": exp_scaling,
     "convergence": exp_convergence,
