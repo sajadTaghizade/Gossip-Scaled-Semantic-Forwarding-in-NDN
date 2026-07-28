@@ -100,12 +100,13 @@ asked, but a score means nothing outside the embedding space that produced it.
 
 ```
 gsndn/
-  datasets/      two labelled name catalogs, built from an explicit lexicon
+  datasets/      two labelled name catalogs, built from an explicit lexicon,
+                 plus grounded variants using Brick/SAREF/Haystack/SSN class names
   admission.py   what a producer knows about its own services
   risk.py        per-route boundaries from an error budget
   strategies/    Vanilla NDN, SAF, SAF+ES, SEF, GS-NDN, RC-NDN and ablations
   gossip.py      anti-entropy over verified mappings and calibration evidence
-  churn.py       producers that depart, return and relocate
+  churn.py       producers that depart, return, relocate and narrow their schema
   adversary.py   compromised routers, and how far their lies travel
   embeddings.py  MiniLM via ONNX, precomputed vectors, a lexical control
   des.py         discrete-event kernel with a single-server queue per router
@@ -117,7 +118,7 @@ gsndn/
   runner.py      assemble a scenario, run it, score it
 experiments/     model fetch, embedding export, microbenchmarks, campaign, figures
 ndnsim/          ns-3 cross-validation of the transport layer
-tests/           36 tests, most guarding a specific mistake made while building this
+tests/           50 tests, most guarding a specific mistake made while building this
 ```
 
 ## Running it
@@ -128,6 +129,8 @@ pip install -r requirements.txt
 python experiments/fetch_model.py                                # ~80 MB, cached outside the repo
 python experiments/export_embeddings.py --all                    # encode every catalog name once
 python experiments/export_embeddings.py --all --backend lexical  # the no-transformer control
+python experiments/export_embeddings.py --domain hospital-grounded \
+    --cost-from data/embeddings/hospital.all-MiniLM-L6-v2-onnx.json   # ontology-grounded variant
 python experiments/bench_micro.py                                # measure this machine's costs
 
 python experiments/run_experiments.py --all --seeds 20
