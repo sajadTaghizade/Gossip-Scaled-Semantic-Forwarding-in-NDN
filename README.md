@@ -53,6 +53,15 @@ move along that curve without retuning anything, and to know where on it you
 are. A single-seed run early in development showed it winning on both axes at
 once; twenty seeds did not reproduce that, and the claim was withdrawn.
 
+**It does not beat a threshold tuned on a labelled catalog, even someone else's.**
+Put the budget against a fixed threshold tuned on one domain and carried to the
+other, and rc-ndn Pareto-dominates in none of fourteen comparisons; the
+transferred threshold dominates in four. What it does is hold its budget where
+the transferred threshold missed one — at ε = 0.02, tuned on city, realising
+0.032 on hospital — and get there without a labelled sample of the domain it
+runs on. That is the claim, and it is narrower than efficiency. See
+[`RESULTS.md`](RESULTS.md) §4.
+
 **Risk control alone deadlocks.** A boundary set too high blocks exactly the
 decisions that would produce the evidence to lower it, so the system stops
 forwarding, stops learning, and stays there: left unexplored at ε ≤ 0.10 it

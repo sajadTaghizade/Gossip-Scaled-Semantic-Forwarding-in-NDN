@@ -97,6 +97,75 @@ Learned boundaries spread as evidence accumulates — standard deviation 0.000 a
 0.096 at ε = 0.40. That spread is the direct evidence that a single global
 number could not have served every route.
 
+### Against a threshold tuned on the other domain
+
+The comparison above is not the one a sceptic would ask for. A fixed threshold
+traces its own frontier: sweep it and every point is a (realised error,
+satisfaction) pair, so an operator who can measure realised error on their own
+catalog can simply pick the point they want. Section 3's flat precision curve
+does not answer that; it only says where the best F1 sits.
+
+What the budget can claim over such an operator is narrower, and it is about
+*transfer*. A threshold is placed using the catalog available at tuning time,
+and the network it then runs on is not that catalog. So: build the frontier on
+one domain, take for each budget the most permissive threshold whose realised
+error stays inside it, carry that threshold to the other domain, and stand it
+against rc-ndn given the same budget and calibrating live on the domain it was
+moved to. Same configuration as the sweep above, twenty seeds
+(`--experiment threshold_transfer`).
+
+**Tuned on city, evaluated on hospital:**
+
+| ε | 0.02 | 0.05 | 0.10 | 0.20 | 0.30 | 0.40 |
+|---|---:|---:|---:|---:|---:|---:|
+| threshold chosen on city | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 |
+| its realised error on hospital | **0.032** | 0.032 | 0.032 | 0.032 | 0.032 | 0.032 |
+| within budget | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| its satisfaction | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 |
+| rc-ndn realised error | 0.009 | 0.009 | 0.009 | 0.014 | 0.025 | 0.035 |
+| rc-ndn satisfaction | 0.818 | 0.818 | 0.841 | 0.919 | 0.959 | 0.967 |
+
+**Tuned on hospital, evaluated on city:**
+
+| ε | 0.02 | 0.05 | 0.10 | 0.20 | 0.30 | 0.40 |
+|---|---:|---:|---:|---:|---:|---:|
+| threshold chosen on hospital | 0.70 | 0.45 | 0.45 | 0.45 | 0.45 | 0.45 |
+| its realised error on city | 0.003 | 0.011 | 0.011 | 0.011 | 0.011 | 0.011 |
+| its satisfaction | 0.804 | 0.983 | 0.983 | 0.983 | 0.983 | 0.983 |
+| rc-ndn realised error | 0.010 | 0.010 | 0.011 | 0.012 | 0.016 | 0.020 |
+| rc-ndn satisfaction | 0.813 | 0.813 | 0.845 | 0.956 | 0.977 | 0.979 |
+
+**rc-ndn does not dominate the transferred frontier, and the earlier claim of
+better efficiency is withdrawn.** Across the fourteen comparisons -- seven
+budgets in each direction -- rc-ndn Pareto-dominates in **none**. The
+transferred threshold dominates in four, all at ε ≥ 0.2 on the hospital-tuned
+side where 0.45 reaches 0.983 satisfaction inside budget and rc-ndn's best is
+0.979. The other ten are trades: less error for less satisfaction, which is the
+same trade section 4 already reports.
+
+Two things survive, and they are worth less than the withdrawn claim.
+
+*The transferred threshold missed the budget once, and it was the tightest one.*
+Tuned on city at ε = 0.02, 0.45 realises 0.011 there and 0.032 on hospital --
+over budget by 61%, with the confidence interval (±0.009) nowhere near covering
+the gap. rc-ndn held its budget in all fourteen. One violation in fourteen is a
+weak result and is reported as one; what makes it worth reporting at all is
+where it landed. Every budget from 0.05 up is slack -- no threshold in the sweep
+realises more than 0.032 error on either domain -- so "tuning" degenerates to
+"take the most permissive threshold" and transfer cannot fail. The one budget
+that actually binds is the one transfer broke.
+
+*The two knobs are not equally available.* Placing a threshold on the frontier
+requires having measured realised error, which requires a labelled catalog for
+the domain you are about to run on. That is the assumption the transfer
+experiment removes, and removing it is the whole point: rc-ndn gets its labels
+from producer feedback at run time, on the domain it is actually deployed in.
+The defensible statement is therefore **not** that the budget forwards more
+efficiently, but that it is *tunable without access to the test domain* and
+reports where on the curve it ended up. On these two catalogs an operator who
+does have a labelled sample of the target domain should tune a threshold on it
+and will do slightly better.
+
 ### Why a flat per-route estimator does not work
 
 The first version estimated each route's boundary from its own observations
