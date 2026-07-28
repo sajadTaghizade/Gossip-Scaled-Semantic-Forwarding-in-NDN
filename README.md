@@ -82,6 +82,7 @@ gsndn/
   metrics.py     correctness-aware scoring
   runner.py      assemble a scenario, run it, score it
 experiments/     model fetch, embedding export, microbenchmarks, campaign, figures
+ndnsim/          ns-3 cross-validation of the transport layer, and its comparison script
 tests/           36 tests, most guarding a specific mistake made while building this
 data/            exported embeddings and the measured cost model
 results/         campaign output and figures
@@ -108,6 +109,11 @@ python experiments/make_figures.py
 
 python -m pytest tests/ -q
 ```
+
+To cross-check the transport model against a real NDN stack, see
+[`ndnsim/README.md`](ndnsim/README.md). On the same topology and load the two
+agree on median round-trip time to within 0.11 ms once the producer service time
+this model charges — and ndnSIM does not — is accounted for.
 
 Encoding is separated from simulation deliberately. It mirrors the deployment,
 where FIB-entry embeddings are computed when routes are installed rather than

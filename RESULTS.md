@@ -241,7 +241,33 @@ among next hops by remaining battery, which matters in the dense mesh it was
 designed for and is orthogonal to name resolution. The two could be combined;
 nothing here tests that.
 
-## 10. What this does not show
+## 10. Is the simulator right?
+
+A hand-written simulator can be perfectly self-consistent and still get NDN
+wrong, and every comparison above would inherit the error without looking
+suspicious. The transport layer — the part that is not our contribution — is
+therefore checked against ndnSIM on the same topology, links and load, with
+exact-match forwarding only:
+
+| | n | mean | p50 | p95 | p99 |
+|---|---:|---:|---:|---:|---:|
+| ndnSIM | 4,351 | 53.72 ms | 70.08 ms | 70.18 ms | 70.21 ms |
+| This model | 4,545 | 63.49 ms | **71.19 ms** | 71.20 ms | 71.20 ms |
+
+The medians differ by 1.11 ms, of which 1.00 ms is the producer service time
+this model charges and ndnSIM does not. **The unexplained residual is 0.11 ms.**
+
+The means differ by more, and that is a difference in request pattern rather
+than in transport: ndnSIM's Zipf consumer has all six consumers drawing from one
+popularity distribution, so many Interests are satisfied by PIT aggregation
+almost instantly, while this model's consumers hold overlapping but distinct
+slices. The median is the quantity both setups define identically.
+
+Semantic resolution has no ndnSIM counterpart and is not validated this way —
+it is the contribution, not the baseline. See [`ndnsim/`](ndnsim/) for the
+scenario, the two build fixes ndnSIM needs on GCC 13, and the comparison script.
+
+## 11. What this does not show
 
 - **Producer-side verification is assumed, not derived.** The simulation decides
   whether a producer serves a request using the catalog's ground truth, standing
