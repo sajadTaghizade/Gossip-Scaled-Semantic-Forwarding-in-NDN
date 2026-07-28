@@ -256,6 +256,13 @@ def run_once(
 
     gossip_report = gossip.report() if gossip is not None else {}
     metrics.update(gossip_report)
+    # Strategy counters belong in the aggregated metrics too: calibrated-route
+    # counts and boundary spread are results, not diagnostics, and leaving them
+    # only on the run object meant a sweep reported them as zero.
+    metrics.update({
+        k: float(v) for k, v in strategy.stats().items()
+        if isinstance(v, (int, float))
+    })
     metrics.update(churn.report())
     metrics.update(adversary.audit())
 

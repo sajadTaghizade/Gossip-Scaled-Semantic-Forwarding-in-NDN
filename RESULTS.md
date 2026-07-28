@@ -75,20 +75,27 @@ calls and including them would dilute any rate towards zero.
 
 | ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| realised error | 0.006 | 0.006 | 0.010 | 0.008 | 0.015 | 0.020 | 0.029 |
+| realised error | 0.009 | 0.009 | 0.009 | 0.010 | 0.014 | 0.025 | 0.035 |
 | within budget | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| satisfaction | 0.827 | 0.827 | 0.853 | 0.903 | 0.926 | 0.960 | 0.968 |
-| coverage | 0.208 | 0.208 | 0.219 | 0.236 | 0.246 | 0.263 | 0.269 |
+| satisfaction | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | 0.959 | 0.967 |
+| coverage | 0.194 | 0.194 | 0.205 | 0.222 | 0.238 | 0.258 | 0.265 |
+| calibrated routes | 235 | 235 | 264 | — | 348 | — | 402 |
+| boundary spread (σ) | 0.000 | 0.000 | 0.012 | — | 0.042 | — | 0.096 |
 
-The budget holds at every setting, and the coverage/risk curve is monotone: a
-tighter budget forwards less and errs less. At ε = 0.2, risk-controlled
-forwarding beats a tuned-threshold GS-NDN on both axes simultaneously —
-satisfaction 0.946 against 0.933, realised error 0.0074 against 0.0189 — with no
-threshold to tune.
+City behaves the same way: 0.010 realised at ε = 0.02 rising to 0.020 at 0.40,
+within budget throughout.
 
-Learned boundaries spread as evidence accumulates (standard deviation 0 → 0.073
-as ε loosens from 0.02 to 0.35). That spread is the direct evidence that a
-single global number could not have served every route.
+**It is a trade, not a free win.** At ε = 0.2 the realised error is half
+GS-NDN's — 0.014 against 0.027 — for two points less satisfaction, 0.919 against
+0.940. What ε buys is movement along that curve without retuning, and knowledge
+of where on it you are. An early single-seed run showed a win on both axes
+simultaneously; twenty seeds did not reproduce it and the claim was withdrawn
+rather than kept at a favourable seed.
+
+Learned boundaries spread as evidence accumulates — standard deviation 0.000 at
+ε = 0.02, where almost every route still sits on the pooled boundary, rising to
+0.096 at ε = 0.40. That spread is the direct evidence that a single global
+number could not have served every route.
 
 ### Why a flat per-route estimator does not work
 
@@ -106,16 +113,29 @@ A boundary set too high blocks exactly the decisions that would have produced
 the evidence to lower it. The system stops forwarding, stops learning, and stays
 there.
 
-| | ε ≤ 0.10 | evidence gathered | satisfaction |
-|---|---:|---:|---:|
-| no exploration | boundary 1.00, refuse all | 104 | 0.745 |
-| 5% exploration | boundary 0.87 | 476–740 | 0.853 |
+At ε ≤ 0.10, hospital:
 
-This is a property of learning from your own choices, not an implementation
-fault, and it is the sharpest argument for gossip in this design: **pooled
-evidence means each router has to explore less.** Exploratory forwards are
-decisions the budget explicitly did not cover, and are counted separately rather
-than folded into the reported rate.
+| | observations | calibrated routes | satisfaction | realised error |
+|---|---:|---:|---:|---:|
+| no exploration | 104 | 68 | 0.738 | 0.002 |
+| 5% exploration | 598 | 235 | 0.818 | 0.009 |
+
+Tightening ε below 0.10 changes nothing for the unexploring controller: it is
+already refusing everything it can, so there is no behaviour left to tighten.
+Exploratory forwards are decisions the budget explicitly did not cover and are
+counted separately rather than folded into the reported rate.
+
+**Sharing evidence is the precondition for calibration, not an optimisation.**
+
+| at ε = 0.2 | observations | of which remote | calibrated routes |
+|---|---:|---:|---:|
+| with evidence gossip | 1,261 | 945 (75%) | 348 |
+| without | 245 | 0 | 147 |
+
+Three quarters of what a router calibrates on was gathered by somebody else. No
+router sees enough of its own traffic to fit per-route boundaries; this is what
+gossip is for in this design, and it is a stronger reason than the encoder
+savings that motivated the earlier version.
 
 ## 6. Producer churn
 
@@ -126,17 +146,25 @@ useful. Only feedback detects it.
 
 Interest satisfaction, hospital, 8 edge routers:
 
-| mean seconds between events | static | 5 s | 2 s |
-|---|---:|---:|---:|
-| SAF+ES | 0.928 | 0.774 | 0.577 |
-| GS-NDN | 0.933 | 0.778 | 0.579 |
-| GS-NDN, no verification | 0.928 | 0.773 | 0.577 |
-| **Risk-controlled** | **0.946** | **0.797** | **0.634** |
+| mean seconds between events | static | 10 s | 5 s | 2 s | 1 s |
+|---|---:|---:|---:|---:|---:|
+| SAF+ES | 0.932 | 0.851 | 0.780 | 0.582 | 0.385 |
+| GS-NDN | 0.940 | 0.851 | 0.787 | 0.587 | 0.380 |
+| GS-NDN, no verification | 0.932 | 0.844 | 0.780 | 0.584 | 0.380 |
+| Risk-controlled | 0.919 | 0.828 | 0.764 | 0.579 | 0.368 |
 
-The advantage widens as the network becomes unstable — from 1.8 points over
-SAF+ES when static to 5.7 points at two seconds between events. This is the
-setting the static ablation could not show, where the earlier finding that
-verification costs 6% more work for 0.8 points of satisfaction reverses.
+**This is a negative result and is reported as one.** Churn was the setting
+where verification was expected to finally earn its cost: a relocation changes
+the right answer without changing any similarity score, so re-encoding cannot
+detect it and only feedback can. Over twenty seeds no such advantage appears.
+Every strategy degrades together, and at one second between events all four land
+within 0.02 of each other. A single-seed run during development suggested
+risk-controlled forwarding pulled ahead under churn; it does not.
+
+What churn does establish is that the Embedding Store's invalidation path --
+specified by SAF, implemented here, and never exercised by any static experiment
+-- is now under load, and that no strategy in this family tolerates a network
+reorganising itself every second.
 
 ## 7. Compromised routers
 
@@ -151,9 +179,10 @@ against names clients actually request:
 
 | compromised | 0% | 12.5% | 25% | 50% |
 |---|---:|---:|---:|---:|
-| GS-NDN satisfaction | 0.933 | 0.855 | 0.815 | 0.750 |
-| Risk-controlled satisfaction | 0.946 | 0.855 | 0.821 | 0.767 |
-| Risk-controlled realised error | 0.007 | 0.033 | 0.060 | 0.080 |
+| GS-NDN satisfaction | 0.940 | 0.832 | 0.783 | 0.747 |
+| Risk-controlled satisfaction | 0.919 | 0.822 | 0.780 | 0.754 |
+| GS-NDN realised error | 0.027 | 0.103 | 0.142 | 0.165 |
+| Risk-controlled realised error | 0.014 | 0.105 | 0.151 | 0.170 |
 
 **Degradation is graceful, not prevented.** Against a persistent attacker,
 retraction does not contain the attack — poison retracted after one round trip
@@ -174,9 +203,14 @@ from MiniLM and 0.62 from an n-gram model are not the same measurement, and the
 gossip layer refuses to send evidence across an encoder boundary rather than
 pooling incomparable numbers.
 
+Satisfaction degrades gracefully as more routers run the weaker encoder --
+hospital 0.940 → 0.931 → 0.914 as the lexical share goes 0 → 25% → 50%, city
+0.956 → 0.949 → 0.930 -- which is what should happen when a mixed network keeps
+sharing what it can and stops sharing what it cannot.
+
 This is the structural argument for gossiping names and verdicts rather than
-vectors, and it is the second reason signatures were the wrong currency —
-they are not portable either.
+vectors, and it is the second reason signatures were the wrong currency: they
+are not portable across encoders either.
 
 ## 9. Where the cost goes as the network grows
 

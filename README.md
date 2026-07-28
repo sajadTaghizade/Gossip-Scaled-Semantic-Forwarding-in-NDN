@@ -43,20 +43,23 @@ The budget holds. Measured out of sample, over exactly the decisions it governs:
 
 | ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| realised error | 0.006 | 0.006 | 0.010 | 0.008 | 0.015 | 0.020 | 0.029 |
-| satisfaction | 0.827 | 0.827 | 0.853 | 0.903 | 0.926 | 0.960 | 0.968 |
+| realised error | 0.009 | 0.009 | 0.009 | 0.010 | 0.014 | 0.025 | 0.035 |
+| satisfaction | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | 0.959 | 0.967 |
 
-At ε = 0.2 this beats a tuned-threshold GS-NDN on **both** axes at once —
-satisfaction 0.946 against 0.933, realised error 0.0074 against 0.0189 — with
-nothing to tune.
+It is a trade, not a free win. At ε = 0.2 the risk-controlled plane errs at
+**half the rate** of a tuned-threshold GS-NDN — 0.014 against 0.027 — for two
+points less satisfaction, 0.919 against 0.940. What ε buys is the ability to
+move along that curve without retuning anything, and to know where on it you
+are. A single-seed run early in development showed it winning on both axes at
+once; twenty seeds did not reproduce that, and the claim was withdrawn.
 
 **Risk control alone deadlocks.** A boundary set too high blocks exactly the
 decisions that would produce the evidence to lower it, so the system stops
-forwarding, stops learning, and stays there: left unexplored at ε = 0.05 it
-settles at refuse-everything on 104 observations. Spending 5% of refused
-decisions on evidence gathers 476 and reaches 0.859. This is a property of
-learning from your own choices, not an implementation fault, and it is why
-gossip matters — pooled evidence means each router explores less.
+forwarding, stops learning, and stays there: left unexplored at ε ≤ 0.10 it
+settles at refuse-everything on 104 observations and 0.738 satisfaction, and
+tightening ε below 0.10 changes nothing because it is already refusing what it
+can. Spending 5% of refused decisions on evidence gathers 598 and reaches
+0.818.
 
 Two further results, both in [`RESULTS.md`](RESULTS.md):
 
@@ -143,11 +146,19 @@ feedback channel is informative, not correct.
 decisions the budget explicitly did not cover, and they are counted separately
 rather than folded into the reported rate.
 
-*Poisoning degrades gracefully; it is not prevented.* Against a persistent
-attacker re-injecting every gossip round, retraction does not contain the
-attack — satisfaction falls from 0.933 to 0.750 at 50% compromise. What limits
-the damage is that a router's own confirmed mappings outrank anything it is
-told. Provenance and reputation are left as future work.
+*Poisoning degrades gracefully; it is not prevented, and risk control does not
+help.* Against a persistent attacker re-injecting every gossip round,
+satisfaction falls from 0.940 to 0.747 at 50% compromise and the realised error
+rises to 0.17 — the budget is a guarantee conditional on honest reporting, and
+that condition is exactly what the attack removes. All three strategies degrade
+alike; what limits the damage is that a router's own confirmed mappings outrank
+anything it is told. Provenance and reputation are left as future work.
+
+*Churn hurts everything equally.* Producer mobility was expected to be where
+verification finally earns its cost. Over twenty seeds it is not: at one second
+between events every strategy lands within 0.02 of the others (0.368 to 0.385).
+Verification does not confer a measurable advantage even here, and this is
+reported rather than quietly dropped.
 
 *Gossip loses when there is nobody to share with.* On a single edge router it is
 a net cost; the benefit appears from about four edge routers upward.

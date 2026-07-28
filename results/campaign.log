@@ -70,3 +70,231 @@ all-MiniLM-L6-v2-onnx Th=0.7        0.865±0.009         0.998±0.001         0.
 lexical-char35-512 Th=0.5           0.790±0.009         0.995±0.001         0.790±0.009         0.881±0.005 
 lexical-char35-512 Th=0.6           0.694±0.006         0.998±0.000         0.694±0.006         0.819±0.004 
 lexical-char35-512 Th=0.7           0.652±0.003         0.999±0.000         0.652±0.003         0.789±0.002 
+
+--- city: encoder comparison ---
+strategy                                     isr           precision              recall                  f1
+------------------------------------------------------------------------------------------------------------
+all-MiniLM-L6-v2-onnx Th=0.5        0.983±0.003         0.999±0.000         0.983±0.003         0.991±0.002 
+all-MiniLM-L6-v2-onnx Th=0.6        0.957±0.006         0.999±0.000         0.957±0.006         0.978±0.003 
+all-MiniLM-L6-v2-onnx Th=0.7        0.804±0.013         1.000±0.000         0.804±0.013         0.891±0.008 
+lexical-char35-512 Th=0.5           0.840±0.012         0.995±0.001         0.840±0.012         0.910±0.007 
+lexical-char35-512 Th=0.6           0.732±0.008         0.998±0.000         0.732±0.008         0.845±0.005 
+lexical-char35-512 Th=0.7           0.643±0.005         1.000±0.000         0.643±0.005         0.783±0.004 
+
+[+] encoder finished in 122.6s -> /home/user/Distributed-Systems/Final_Project/results/encoder.json
+
+========================================================================
+ENERGY  (20 seeds)
+========================================================================
+
+--- hospital: energy ---
+strategy           energy_total_j      energy_radio_j    energy_compute_j  energy_compute_share  energy_per_interest_mj                 isr
+-------------------------------------------------------------------------------------------------------------------------------------------
+vanilla-ndn        549.087±0.144         6.270±0.102         3.250±0.049         0.006±0.000       121.713±0.867         0.598±0.003 
+saf                734.743±1.993         9.543±0.176       213.692±2.221         0.291±0.002       162.853±0.850         0.932±0.004 
+saf+es             654.363±2.017         9.548±0.174       120.940±2.227         0.185±0.003       145.043±0.966         0.932±0.004 
+gs-ndn             633.386±1.754         9.574±0.177        96.706±2.064         0.153±0.003       140.395±0.960         0.937±0.004 
+sef (grid)         978.584±0.704        13.025±0.506         6.414±0.229         0.007±0.000       216.916±1.529         0.598±0.003 
+gs-ndn (grid)     1065.463±1.613        18.951±0.769        99.821±1.695         0.094±0.001       236.171±1.637         0.935±0.003 
+
+--- city: energy ---
+strategy           energy_total_j      energy_radio_j    energy_compute_j  energy_compute_share  energy_per_interest_mj                 isr
+-------------------------------------------------------------------------------------------------------------------------------------------
+vanilla-ndn        549.259±0.133         6.442±0.091         3.250±0.049         0.006±0.000       121.751±0.868         0.598±0.003 
+saf                708.481±1.717         9.829±0.123       183.060±1.898         0.258±0.002       157.034±0.849         0.941±0.008 
+saf+es             635.970±3.206         9.831±0.121        99.392±3.613         0.156±0.005       140.965±1.067         0.940±0.008 
+gs-ndn             617.689±2.132         9.912±0.122        78.204±2.390         0.127±0.003       136.915±0.971         0.957±0.005 
+sef (grid)         978.920±0.699        13.361±0.500         6.414±0.229         0.007±0.000       216.990±1.530         0.598±0.003 
+gs-ndn (grid)     1049.977±2.610        19.497±0.748        81.323±2.302         0.077±0.002       232.738±1.643         0.959±0.004 
+
+[+] energy finished in 134.3s -> /home/user/Distributed-Systems/Final_Project/results/energy.json
+
+========================================================================
+HETEROGENEITY  (20 seeds)
+========================================================================
+
+--- hospital: encoder heterogeneity ---
+  gs-ndn     ISR  0.0:0.940  0.25:0.931  0.5:0.914
+  rc-ndn     ISR  0.0:0.919  0.25:0.911  0.5:0.882
+
+--- city: encoder heterogeneity ---
+  gs-ndn     ISR  0.0:0.956  0.25:0.949  0.5:0.930
+  rc-ndn     ISR  0.0:0.956  0.25:0.945  0.5:0.929
+
+[+] heterogeneity finished in 293.7s -> /home/user/Distributed-Systems/Final_Project/results/heterogeneity.json
+
+========================================================================
+MAIN  (20 seeds)
+========================================================================
+
+--- hospital ---
+strategy                    isr           precision              recall                  f1  false_positive_rate         irt_mean_ms          irt_p95_ms        encoder_runs  risk_realised_error
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+vanilla-ndn        0.599±0.002         1.000±0.000         0.599±0.002         0.749±0.002         0.000±0.000        65.306±0.753        71.195±0.000         0.000±0.000         0.000±0.000 
+saf                0.932±0.004         0.996±0.001         0.932±0.004         0.963±0.002         0.001±0.000        65.798±0.873        77.939±0.000      4121.100±30.657        0.034±0.010 
+saf+es             0.932±0.004         0.996±0.001         0.932±0.004         0.963±0.002         0.001±0.000        64.010±0.853        77.934±0.000      1955.250±25.324        0.033±0.010 
+gs-ndn             0.940±0.004         0.997±0.001         0.940±0.004         0.968±0.002         0.001±0.000        63.719±0.822        74.324±0.430      1613.550±36.965        0.027±0.008 
+rc-ndn             0.919±0.010         0.998±0.000         0.919±0.010         0.957±0.006         0.005±0.001        63.298±0.965        72.593±0.548      1724.800±78.748        0.014±0.005 
+
+--- city ---
+strategy                    isr           precision              recall                  f1  false_positive_rate         irt_mean_ms          irt_p95_ms        encoder_runs  risk_realised_error
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+vanilla-ndn        0.599±0.002         1.000±0.000         0.599±0.002         0.749±0.002         0.000±0.000        65.308±0.753        71.198±0.000         0.000±0.000         0.000±0.000 
+saf                0.940±0.008         0.998±0.001         0.940±0.008         0.968±0.004         0.000±0.000        65.295±0.953        76.960±0.000      4118.450±30.798        0.019±0.007 
+saf+es             0.940±0.008         0.998±0.001         0.940±0.008         0.968±0.004         0.000±0.000        63.780±0.961        76.954±0.000      1858.400±55.654        0.019±0.007 
+gs-ndn             0.956±0.007         0.999±0.000         0.956±0.007         0.977±0.004         0.000±0.000        63.433±0.921        72.975±0.584      1502.750±40.316        0.010±0.004 
+rc-ndn             0.956±0.010         0.999±0.000         0.956±0.010         0.977±0.005         0.004±0.001        63.434±0.905        72.896±0.617      1504.950±52.272        0.012±0.004 
+
+[+] main finished in 213.3s -> /home/user/Distributed-Systems/Final_Project/results/main.json
+
+========================================================================
+POISONING  (20 seeds)
+========================================================================
+
+--- hospital: compromised routers ---
+  gs-ndn             ISR/err  0.0:0.940/0.027  0.125:0.832/0.103  0.25:0.783/0.142  0.5:0.747/0.165
+  gs-ndn-no-verify   ISR/err  0.0:0.932/0.033  0.125:0.827/0.107  0.25:0.780/0.145  0.5:0.747/0.167
+  rc-ndn             ISR/err  0.0:0.919/0.014  0.125:0.822/0.105  0.25:0.780/0.151  0.5:0.754/0.170
+
+--- city: compromised routers ---
+  gs-ndn             ISR/err  0.0:0.956/0.010  0.125:0.843/0.089  0.25:0.789/0.141  0.5:0.755/0.158
+  gs-ndn-no-verify   ISR/err  0.0:0.940/0.019  0.125:0.832/0.099  0.25:0.783/0.143  0.5:0.750/0.165
+  rc-ndn             ISR/err  0.0:0.956/0.012  0.125:0.841/0.100  0.25:0.792/0.145  0.5:0.760/0.166
+
+[+] poisoning finished in 792.8s -> /home/user/Distributed-Systems/Final_Project/results/poisoning.json
+
+========================================================================
+RATE  (20 seeds)
+========================================================================
+
+--- hospital: offered load, single edge router ---
+  saf        p95 IRT  30:   79.1  60:   82.1  100:   84.6  150:   89.6  200:   98.3  250:  116.9  300:  172.2
+  saf+es     p95 IRT  30:   77.9  60:   77.9  100:   77.9  150:   78.2  200:   79.7  250:   80.9  300:   82.2
+  gs-ndn     p95 IRT  30:   77.9  60:   77.9  100:   77.9  150:   78.6  200:   80.2  250:   81.5  300:   82.9
+
+--- city: offered load, single edge router ---
+  saf        p95 IRT  30:   77.4  60:   79.8  100:   81.8  150:   84.7  200:   88.9  250:   95.7  300:  109.3
+  saf+es     p95 IRT  30:   77.0  60:   77.0  100:   77.0  150:   77.0  200:   77.0  250:   77.5  300:   78.3
+  gs-ndn     p95 IRT  30:   77.0  60:   77.0  100:   77.0  150:   77.0  200:   77.0  250:   77.6  300:   78.4
+
+[+] rate finished in 386.7s -> /home/user/Distributed-Systems/Final_Project/results/rate.json
+
+========================================================================
+RISK  (20 seeds)
+========================================================================
+
+--- hospital: error budget ---
+  rc-ndn
+    eps=0.02  realised 0.0085 [ok ]  isr 0.818  coverage 0.194
+    eps=0.05  realised 0.0088 [ok ]  isr 0.818  coverage 0.194
+    eps=0.1   realised 0.0091 [ok ]  isr 0.841  coverage 0.205
+    eps=0.15  realised 0.0100 [ok ]  isr 0.885  coverage 0.222
+    eps=0.2   realised 0.0143 [ok ]  isr 0.919  coverage 0.238
+    eps=0.3   realised 0.0252 [ok ]  isr 0.959  coverage 0.258
+    eps=0.4   realised 0.0352 [ok ]  isr 0.967  coverage 0.265
+  rc-ndn-no-explore
+    eps=0.02  realised 0.0016 [ok ]  isr 0.738  coverage 0.130
+    eps=0.05  realised 0.0016 [ok ]  isr 0.738  coverage 0.130
+    eps=0.1   realised 0.0016 [ok ]  isr 0.738  coverage 0.130
+    eps=0.15  realised 0.0038 [ok ]  isr 0.802  coverage 0.162
+    eps=0.2   realised 0.0063 [ok ]  isr 0.866  coverage 0.188
+    eps=0.3   realised 0.0100 [ok ]  isr 0.893  coverage 0.203
+    eps=0.4   realised 0.0125 [ok ]  isr 0.903  coverage 0.210
+  rc-ndn-no-evidence
+    eps=0.02  realised 0.0094 [ok ]  isr 0.856  coverage 0.217
+    eps=0.05  realised 0.0094 [ok ]  isr 0.856  coverage 0.217
+    eps=0.1   realised 0.0091 [ok ]  isr 0.857  coverage 0.218
+    eps=0.15  realised 0.0115 [ok ]  isr 0.876  coverage 0.226
+    eps=0.2   realised 0.0127 [ok ]  isr 0.899  coverage 0.234
+    eps=0.3   realised 0.0192 [ok ]  isr 0.936  coverage 0.249
+    eps=0.4   realised 0.0310 [ok ]  isr 0.957  coverage 0.260
+
+--- city: error budget ---
+  rc-ndn
+    eps=0.02  realised 0.0103 [ok ]  isr 0.813  coverage 0.185
+    eps=0.05  realised 0.0103 [ok ]  isr 0.813  coverage 0.185
+    eps=0.1   realised 0.0108 [ok ]  isr 0.845  coverage 0.197
+    eps=0.15  realised 0.0089 [ok ]  isr 0.916  coverage 0.228
+    eps=0.2   realised 0.0115 [ok ]  isr 0.956  coverage 0.245
+    eps=0.3   realised 0.0162 [ok ]  isr 0.977  coverage 0.254
+    eps=0.4   realised 0.0199 [ok ]  isr 0.979  coverage 0.257
+  rc-ndn-no-explore
+    eps=0.02  realised 0.0105 [ok ]  isr 0.735  coverage 0.130
+    eps=0.05  realised 0.0105 [ok ]  isr 0.735  coverage 0.130
+    eps=0.1   realised 0.0105 [ok ]  isr 0.735  coverage 0.130
+    eps=0.15  realised 0.0092 [ok ]  isr 0.801  coverage 0.160
+    eps=0.2   realised 0.0065 [ok ]  isr 0.854  coverage 0.184
+    eps=0.3   realised 0.0057 [ok ]  isr 0.877  coverage 0.198
+    eps=0.4   realised 0.0062 [ok ]  isr 0.898  coverage 0.211
+  rc-ndn-no-evidence
+    eps=0.02  realised 0.0089 [ok ]  isr 0.860  coverage 0.215
+    eps=0.05  realised 0.0089 [ok ]  isr 0.860  coverage 0.215
+    eps=0.1   realised 0.0088 [ok ]  isr 0.863  coverage 0.216
+    eps=0.15  realised 0.0087 [ok ]  isr 0.884  coverage 0.224
+    eps=0.2   realised 0.0097 [ok ]  isr 0.915  coverage 0.234
+    eps=0.3   realised 0.0138 [ok ]  isr 0.959  coverage 0.249
+    eps=0.4   realised 0.0172 [ok ]  isr 0.972  coverage 0.254
+
+[+] risk finished in 975.8s -> /home/user/Distributed-Systems/Final_Project/results/risk.json
+
+========================================================================
+SCALING  (20 seeds)
+========================================================================
+
+--- hospital: edge routers ---
+  saf        encoder runs  1:  2022  2:  2045  4:  2062  6:  2070  8:  2073  12:  2077  16:  2079
+  saf+es     encoder runs  1:   833  2:   901  4:  1006  6:  1087  8:  1155  12:  1259  16:  1330
+  gs-ndn     encoder runs  1:   875  2:   893  4:   877  6:   893  8:   914  12:   934  16:   959
+
+--- city: edge routers ---
+  saf        encoder runs  1:  2017  2:  2041  4:  2060  6:  2068  8:  2072  12:  2076  16:  2079
+  saf+es     encoder runs  1:   764  2:   841  4:   951  6:  1035  8:  1102  12:  1207  16:  1278
+  gs-ndn     encoder runs  1:   781  2:   816  4:   812  6:   837  8:   855  12:   886  16:   914
+
+[+] scaling finished in 412.2s -> /home/user/Distributed-Systems/Final_Project/results/scaling.json
+
+========================================================================
+THRESHOLD  (20 seeds)
+========================================================================
+
+--- hospital: threshold sweep ---
+  saf+es
+    Th=0.45: precision 0.995 recall 0.962 f1 0.978
+    Th=0.5: precision 0.995 recall 0.963 f1 0.979
+    Th=0.55: precision 0.996 recall 0.962 f1 0.979
+    Th=0.6: precision 0.996 recall 0.933 f1 0.963
+    Th=0.65: precision 0.997 recall 0.910 f1 0.951
+    Th=0.7: precision 0.998 recall 0.864 f1 0.926
+    Th=0.75: precision 0.999 recall 0.789 f1 0.882
+    Th=0.8: precision 1.000 recall 0.718 f1 0.836
+  gs-ndn
+    Th=0.45: precision 0.996 recall 0.969 f1 0.982
+    Th=0.5: precision 0.996 recall 0.969 f1 0.982
+    Th=0.55: precision 0.997 recall 0.968 f1 0.982
+    Th=0.6: precision 0.997 recall 0.939 f1 0.967
+    Th=0.65: precision 0.998 recall 0.914 f1 0.954
+    Th=0.7: precision 0.998 recall 0.865 f1 0.927
+    Th=0.75: precision 0.999 recall 0.789 f1 0.882
+    Th=0.8: precision 1.000 recall 0.718 f1 0.836
+
+--- city: threshold sweep ---
+  saf+es
+    Th=0.45: precision 0.998 recall 0.968 f1 0.983
+    Th=0.5: precision 0.998 recall 0.967 f1 0.982
+    Th=0.55: precision 0.998 recall 0.959 f1 0.978
+    Th=0.6: precision 0.998 recall 0.940 f1 0.968
+    Th=0.65: precision 0.998 recall 0.856 f1 0.922
+    Th=0.7: precision 1.000 recall 0.803 f1 0.890
+    Th=0.75: precision 1.000 recall 0.716 f1 0.834
+    Th=0.8: precision 1.000 recall 0.669 f1 0.801
+  gs-ndn
+    Th=0.45: precision 0.999 recall 0.985 f1 0.992
+    Th=0.5: precision 0.999 recall 0.983 f1 0.991
+    Th=0.55: precision 0.999 recall 0.976 f1 0.987
+    Th=0.6: precision 0.999 recall 0.957 f1 0.978
+    Th=0.65: precision 0.999 recall 0.873 f1 0.932
+    Th=0.7: precision 1.000 recall 0.804 f1 0.891
+    Th=0.75: precision 1.000 recall 0.716 f1 0.834
+    Th=0.8: precision 1.000 recall 0.669 f1 0.801
+
+[+] threshold finished in 317.2s -> /home/user/Distributed-Systems/Final_Project/results/threshold.json
