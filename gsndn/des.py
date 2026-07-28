@@ -51,9 +51,6 @@ class Simulator:
             _Event(self.now + delay, next(self._counter), callback, args),
         )
 
-    def schedule_at(self, when: float, callback: Callable[..., None], *args: Any) -> None:
-        self.schedule(when - self.now, callback, *args)
-
     def stop(self) -> None:
         self._stopped = True
 
@@ -69,10 +66,6 @@ class Simulator:
             self.now = event.time
             self._processed += 1
             event.callback(*event.args)
-
-    @property
-    def events_processed(self) -> int:
-        return self._processed
 
     @property
     def pending(self) -> int:

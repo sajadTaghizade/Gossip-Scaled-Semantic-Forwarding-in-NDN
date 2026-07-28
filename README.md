@@ -103,7 +103,7 @@ pip install -r requirements.txt
 python experiments/fetch_model.py
 
 # Encode every catalog name once; the simulator reads these, not the model
-python experiments/export_embeddings.py --all --backend onnx
+python experiments/export_embeddings.py --all
 python experiments/export_embeddings.py --all --backend lexical
 
 # Measure this machine's operation costs; without it, latencies are assumed

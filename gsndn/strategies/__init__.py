@@ -20,7 +20,6 @@ STRATEGIES = (
     # contribution of that mechanism is attributable rather than assumed.
     "gs-ndn-no-gossip",
     "gs-ndn-no-verify",
-    "gs-ndn-no-edge-tag",
 )
 
 
@@ -46,8 +45,6 @@ def build_strategy(
         return GsNdn(threshold, costs, gossip=False)
     if name == "gs-ndn-no-verify":
         return GsNdn(threshold, costs, verify=False)
-    if name == "gs-ndn-no-edge-tag":
-        return GsNdn(threshold, costs, edge_only=False)
     raise ValueError(f"unknown strategy {name!r}; expected one of {STRATEGIES}")
 
 

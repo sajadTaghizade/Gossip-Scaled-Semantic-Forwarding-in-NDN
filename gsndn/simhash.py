@@ -21,17 +21,20 @@ Two roles survive that measurement:
 *Anti-entropy digests.*  Comparing what two routers know without shipping
 embeddings.  A learned mapping travels as two names plus 32 bytes instead of a
 1.5 KB float32 vector -- a factor of about 48 on the wire, which is what makes
-continuous gossip affordable.
+continuous gossip affordable.  (:mod:`gsndn.gossip` currently summarises its own
+state directly; signatures are what a cross-vendor deployment would exchange,
+and the width/accuracy trade is measured here.)
 
-*Candidate prefiltering*, where a FIB is large enough for the cosine to matter.
-At 256 bits the true nearest entry is in the top 8 candidates 95% of the time.
-At the FIB sizes studied here that buys nothing, and the code says so rather
-than claiming a speedup it cannot demonstrate.
+Candidate prefiltering is the other role signatures could fill, where a FIB is
+large enough for the cosine to matter -- at 256 bits the true nearest entry is
+in the top 8 candidates 95% of the time.  At the FIB sizes studied here that
+buys nothing, so no prefilter is implemented; ``experiments/bench_micro.py``
+measures the recall curve that would justify one.
 """
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+from typing import Sequence
 
 import numpy as np
 
@@ -74,15 +77,6 @@ class SimHasher:
         bits = (matrix @ self.planes.T) > 0.0
         return np.packbits(bits, axis=1)
 
-    def estimate_cosine(self, a: np.ndarray, b: np.ndarray) -> float:
-        """Recover an approximate cosine from a Hamming distance."""
-        return float(np.cos(np.pi * hamming(a, b) / self.bits))
-
-    def distance_for_cosine(self, cosine: float) -> float:
-        """The Hamming distance a given cosine corresponds to, in expectation."""
-        cosine = float(np.clip(cosine, -1.0, 1.0))
-        return float(np.arccos(cosine) / np.pi * self.bits)
-
 
 def hamming(a: np.ndarray, b: np.ndarray) -> int:
     return int(_POPCOUNT[np.bitwise_xor(a, b)].sum())
@@ -93,75 +87,3 @@ def hamming_array(query: np.ndarray, table: np.ndarray) -> np.ndarray:
     if table.size == 0:
         return np.zeros(0, dtype=np.int32)
     return _POPCOUNT[np.bitwise_xor(table, query[None, :])].sum(axis=1, dtype=np.int32)
-
-
-def digest(signatures: np.ndarray) -> int:
-    """A cheap order-independent summary of a set of signatures.
-
-    Used by anti-entropy to decide in one comparison whether two routers hold
-    the same knowledge, before either of them offers to send anything.
-    """
-    if signatures.size == 0:
-        return 0
-    folded = np.bitwise_xor.reduce(signatures, axis=0)
-    return int.from_bytes(bytes(folded.tolist()), "little")
-
-
-class SignatureTable:
-    """Signature-to-route map with nearest-neighbour lookup by Hamming distance.
-
-    Provided so the prefilter claim can be measured rather than asserted;
-    ``candidates`` returns the top-k for an exact cosine pass, which is the only
-    form in which signature matching is accurate enough to route on.
-    """
-
-    def __init__(
-        self,
-        hasher: SimHasher,
-        max_distance: Optional[int] = None,
-        cosine_threshold: float = 0.7,
-    ) -> None:
-        self.hasher = hasher
-        self.max_distance = (
-            max_distance
-            if max_distance is not None
-            else int(round(hasher.distance_for_cosine(cosine_threshold)))
-        )
-        self._table = np.zeros((0, hasher.nbytes), dtype=np.uint8)
-        self._routes: List[Tuple[str, str]] = []   # (canonical prefix, face)
-        self.lookups = 0
-        self.hits = 0
-
-    def add(self, signature: np.ndarray, prefix: str, face: str) -> None:
-        self._table = np.vstack([self._table, signature[None, :]])
-        self._routes.append((prefix, face))
-
-    def bulk_add(self, signatures: np.ndarray, routes: Sequence[Tuple[str, str]]) -> None:
-        if len(signatures) != len(routes):
-            raise ValueError("signatures and routes must be the same length")
-        self._table = np.vstack([self._table, signatures]) if len(signatures) else self._table
-        self._routes.extend(routes)
-
-    def candidates(self, signature: np.ndarray, k: int = 8) -> List[Tuple[str, str, int]]:
-        """The k nearest routes by Hamming distance, closest first."""
-        if not self._routes:
-            return []
-        distances = hamming_array(signature, self._table)
-        order = np.argsort(distances)[:k]
-        return [(self._routes[i][0], self._routes[i][1], int(distances[i])) for i in order]
-
-    def lookup(self, signature: np.ndarray) -> Optional[Tuple[str, str, int]]:
-        """Nearest route within ``max_distance``, as (prefix, face, distance)."""
-        self.lookups += 1
-        best = self.candidates(signature, k=1)
-        if not best or best[0][2] > self.max_distance:
-            return None
-        self.hits += 1
-        return best[0]
-
-    def __len__(self) -> int:
-        return len(self._routes)
-
-    @property
-    def memory_bytes(self) -> int:
-        return len(self._routes) * (self.hasher.nbytes + 8)

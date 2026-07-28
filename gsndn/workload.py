@@ -49,9 +49,6 @@ class WorkloadConfig:
 
     seed: int = 0
 
-    def expected_requests(self) -> int:
-        return int(self.rate_per_s * self.duration_ms / 1000.0)
-
 
 @dataclass
 class Request:

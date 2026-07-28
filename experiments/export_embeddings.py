@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Encode every catalog name once, offline, and write a reusable bundle.
 
-Run this on a machine that can download Sentence-Transformers weights.  It
-writes ``data/embeddings/<domain>.<model>.npz`` plus a ``.json`` sidecar holding
+Writes ``data/embeddings/<domain>.<model>.npz`` plus a ``.json`` sidecar holding
 the *measured* encoder timings, which the simulator then uses instead of
 invented latency constants.
 
-    python experiments/export_embeddings.py --domain hospital --model all-MiniLM-L6-v2
-    python experiments/export_embeddings.py --all
+    python experiments/export_embeddings.py --all                     # MiniLM-L6
+    python experiments/export_embeddings.py --all --backend lexical   # the control
 
-Separating encoding from simulation is not just a workaround for restricted
-network access: it mirrors the deployment, where FIB-entry embeddings are
-precomputed when routes are installed, and it makes every reported number
-reproducible without a model download or a GPU.
+Separating encoding from simulation mirrors the deployment, where FIB-entry
+embeddings are computed when routes are installed rather than per Interest, and
+it means every reported number reproduces without a model download or a GPU.
+Requires the ONNX graph from ``fetch_model.py``.
 """
 
 from __future__ import annotations
@@ -30,12 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gsndn import datasets  # noqa: E402
 from gsndn.datasets.schema import name_to_text  # noqa: E402
 from gsndn.embeddings import (  # noqa: E402
-    DEFAULT_MODEL,
     EmbeddingBackend,
     EncoderCost,
     LexicalBackend,
     OnnxMiniLMBackend,
-    SentenceTransformerBackend,
     l2_normalize,
 )
 
@@ -44,11 +41,9 @@ BATCH_SIZES = (1, 2, 4, 8, 16, 32, 64)
 TIMING_REPEATS = 30
 
 
-def make_backend(kind: str, model_name: str) -> EmbeddingBackend:
+def make_backend(kind: str) -> EmbeddingBackend:
     if kind == "onnx":
         return OnnxMiniLMBackend()
-    if kind == "sentence-transformer":
-        return SentenceTransformerBackend(model_name)
     if kind == "lexical":
         return LexicalBackend()
     raise ValueError(f"unknown backend {kind!r}")
@@ -95,11 +90,11 @@ def measure_cost(backend: EmbeddingBackend, samples: list[str]) -> EncoderCost:
     return cost
 
 
-def export(domain: str, kind: str, model_name: str, out_dir: Path) -> Path:
+def export(domain: str, kind: str, out_dir: Path) -> Path:
     catalog = datasets.load(domain)
     names = sorted(set(catalog.all_names))
 
-    backend = make_backend(kind, model_name)
+    backend = make_backend(kind)
     print(
         f"[{domain}] {len(names)} distinct names, backend={backend.id}, "
         f"dim={backend.dim}, load={backend.cost.model_load_ms:.0f} ms"
@@ -154,10 +149,9 @@ def main() -> int:
     parser.add_argument(
         "--backend",
         default="onnx",
-        choices=("onnx", "sentence-transformer", "lexical"),
+        choices=("onnx", "lexical"),
         help="encoder to export with (default: onnx MiniLM-L6)",
     )
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Sentence-Transformers model id")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output directory")
     args = parser.parse_args()
 
@@ -166,7 +160,7 @@ def main() -> int:
 
     targets = datasets.DOMAINS if args.all else (args.domain,)
     for domain in targets:
-        export(domain, args.backend, args.model, args.out)
+        export(domain, args.backend, args.out)
     return 0
 
 

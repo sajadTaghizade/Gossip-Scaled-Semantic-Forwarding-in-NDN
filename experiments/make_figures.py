@@ -37,27 +37,25 @@ PALETTE = {
     "gs-ndn": "#eda100",
     "gs-ndn-no-gossip": "#e87ba4",
     "gs-ndn-no-verify": "#4a3aa7",
-    "gs-ndn-no-edge-tag": "#e34948",
     "gs-ndn-anti-entropy-only": "#e34948",
     "gs-ndn-slow-gossip": "#008300",
     "sef": "#008300",
 }
 MARKERS = {
     "vanilla-ndn": "o", "saf": "s", "saf+es": "^", "gs-ndn": "D",
-    "gs-ndn-no-gossip": "v", "gs-ndn-no-verify": "P", "gs-ndn-no-edge-tag": "X",
-    "gs-ndn-anti-entropy-only": "X", "gs-ndn-slow-gossip": "*", "sef": "*",
+    "gs-ndn-no-gossip": "v", "gs-ndn-no-verify": "P",    "gs-ndn-anti-entropy-only": "X", "gs-ndn-slow-gossip": "*", "sef": "*",
 }
 DASHES = {
     "vanilla-ndn": (None, None), "saf": (5, 2), "saf+es": (2, 1.5),
     "gs-ndn": (None, None), "gs-ndn-no-gossip": (4, 1, 1, 1),
-    "gs-ndn-no-verify": (1, 1), "gs-ndn-no-edge-tag": (6, 2, 1, 2),
+    "gs-ndn-no-verify": (1, 1), "gs-ndn-anti-entropy-only": (6, 2, 1, 2),
+    "gs-ndn-slow-gossip": (3, 3),
     "sef": (3, 3),
 }
 LABELS = {
     "vanilla-ndn": "Vanilla NDN", "saf": "SAF", "saf+es": "SAF+ES",
     "gs-ndn": "GS-NDN (ours)", "gs-ndn-no-gossip": "GS-NDN, no gossip",
     "gs-ndn-no-verify": "GS-NDN, no verification",
-    "gs-ndn-no-edge-tag": "GS-NDN, no edge restriction",
     "gs-ndn-anti-entropy-only": "GS-NDN, anti-entropy only",
     "gs-ndn-slow-gossip": "GS-NDN, 5 s gossip period",
     "sef": "SEF",

@@ -201,14 +201,10 @@ class GsNdn(Saf):
         threshold: float = 0.7,
         costs: Optional[CostModel] = None,
         *,
-        edge_only: bool = True,
         verify: bool = True,
         gossip: bool = True,
     ) -> None:
         super().__init__(threshold, costs)
-        #: Restrict encoder runs to ingress edge routers; core routers forward
-        #: on the tag the edge attached.
-        self.edge_only = edge_only
         #: Retract mappings a Nack disproves, and only gossip proven ones.
         self.verify = verify
         #: Accept mappings other routers have proven.  Off for the ablation.
@@ -249,10 +245,9 @@ class GsNdn(Saf):
                 tag=SemanticTag(cached.canonical, cached.score, router.id),
             )
 
-        # 3. Nothing known. Only an edge router pays to find out.
-        if self.edge_only and router.role != "edge":
-            return Resolution(outcome=OUTCOME_NACK, cpu_ms=self.costs.es_lookup_ms)
-
+        # 3. Nothing known, so this router pays to find out. In practice that is
+        #    always the ingress edge router: anything further along matched the
+        #    tag in step 1 and never reached here.
         refuted = self.refuted[router.id].get(interest.name) if self.verify else None
         if refuted:
             self.reresolutions += 1

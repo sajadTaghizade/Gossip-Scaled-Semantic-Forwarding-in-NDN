@@ -12,10 +12,6 @@ Three backends:
     Runtime on CPU.  Same weights, no PyTorch, no GPU, and a dependency
     footprint an edge router could plausibly carry.  This is the default.
 
-``SentenceTransformerBackend``
-    The same family of models through the original PyTorch stack, for
-    cross-checking the ONNX path and for trying MiniLM-L12 or MPNet.
-
 ``PrecomputedBackend``
     Reads vectors from an ``.npz`` produced earlier by
     ``experiments/export_embeddings.py``.  This is the path that makes results
@@ -43,8 +39,6 @@ from typing import AbstractSet, Dict, List, Optional, Sequence
 import numpy as np
 
 from .datasets.schema import name_to_text
-
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
 
 #: Where the ONNX MiniLM graph and tokenizer are cached on disk.  Kept outside
 #: the repository: the exported ``.npz`` vectors are the committed artefact, not
@@ -131,9 +125,6 @@ class EmbeddingBackend:
     def encode(self, names: Sequence[str]) -> np.ndarray:
         raise NotImplementedError
 
-    def encode_one(self, name: str) -> np.ndarray:
-        return self.encode([name])[0]
-
     @property
     def bytes_per_entry(self) -> int:
         return self.dim * BYTES_PER_FLOAT32
@@ -217,40 +208,6 @@ class OnnxMiniLMBackend(EmbeddingBackend):
         return vectors
 
 
-class SentenceTransformerBackend(EmbeddingBackend):
-    """Live Sentence-Transformers model, as used by SAF."""
-
-    def __init__(self, model_name: str = DEFAULT_MODEL) -> None:
-        super().__init__()
-        from sentence_transformers import SentenceTransformer  # lazy: heavy import
-
-        started = time.perf_counter()
-        self.model = SentenceTransformer(model_name)
-        load_ms = (time.perf_counter() - started) * 1000.0
-
-        self.id = model_name
-        self.dim = int(self.model.get_sentence_embedding_dimension())
-        self.cost = EncoderCost(encode_ms=0.0, model_load_ms=load_ms, measured=True)
-        self._warm_up()
-
-    def _warm_up(self) -> None:
-        """First inference includes lazy allocation; exclude it from the cost."""
-        self.model.encode(["warm up"], show_progress_bar=False, convert_to_numpy=True)
-
-    def encode(self, names: Sequence[str]) -> np.ndarray:
-        texts = [name_to_text(n) for n in names]
-        started = time.perf_counter()
-        vectors = self.model.encode(
-            texts, show_progress_bar=False, convert_to_numpy=True
-        )
-        elapsed_ms = (time.perf_counter() - started) * 1000.0
-        batch = max(1, len(texts))
-        self.cost.batch_ms[batch] = elapsed_ms
-        if batch == 1:
-            self.cost.encode_ms = elapsed_ms
-        return l2_normalize(vectors)
-
-
 class PrecomputedBackend(EmbeddingBackend):
     """Vectors loaded from an ``.npz`` bundle written by the exporter.
 
@@ -291,9 +248,6 @@ class PrecomputedBackend(EmbeddingBackend):
                 f"first: {missing[0]!r}. Re-run the exporter for this catalog."
             )
         return np.stack([self._table[n] for n in names]).astype(np.float32)
-
-    def covers(self, names: Sequence[str]) -> bool:
-        return all(n in self._table for n in names)
 
 
 class LexicalBackend(EmbeddingBackend):
@@ -356,9 +310,6 @@ class NameIndex:
     def __len__(self) -> int:
         return len(self.names)
 
-    def vector_of(self, name: str) -> np.ndarray:
-        return self.vectors[self._position[name]]
-
     def contains(self, name: str) -> bool:
         return name in self._position
 
@@ -400,27 +351,3 @@ class NameIndex:
     @property
     def memory_bytes(self) -> int:
         return int(self.vectors.nbytes)
-
-
-def build_backend(
-    kind: str = "precomputed",
-    *,
-    path: Optional[str | Path] = None,
-    model_name: str = DEFAULT_MODEL,
-    n_features: int = 512,
-) -> EmbeddingBackend:
-    """Construct a backend by name, for use from config and CLI flags."""
-    if kind == "precomputed":
-        if path is None:
-            raise ValueError("the precomputed backend needs a bundle path")
-        return PrecomputedBackend(path)
-    if kind in ("onnx", "minilm", "onnx-minilm"):
-        return OnnxMiniLMBackend(model_dir=path)
-    if kind in ("sentence-transformer", "st"):
-        return SentenceTransformerBackend(model_name)
-    if kind == "lexical":
-        return LexicalBackend(n_features=n_features)
-    raise ValueError(
-        f"unknown embedding backend {kind!r}; expected one of "
-        f"'precomputed', 'onnx', 'sentence-transformer', 'lexical'"
-    )

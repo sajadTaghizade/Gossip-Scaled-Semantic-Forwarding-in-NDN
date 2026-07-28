@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -39,9 +39,6 @@ class Fib:
         entry = FibEntry(prefix=prefix, face=face, cost=cost)
         self._entries[prefix] = entry
         return entry
-
-    def remove(self, prefix: str) -> bool:
-        return self._entries.pop(prefix, None) is not None
 
     def exact(self, name: str) -> Optional[FibEntry]:
         self.lookups += 1
@@ -134,12 +131,6 @@ class Pit:
 
     def satisfy(self, name: str) -> Optional[PitEntry]:
         return self._entries.pop(name, None)
-
-    def expire_before(self, deadline: float) -> List[PitEntry]:
-        stale = [e for e in self._entries.values() if e.created_at < deadline]
-        for entry in stale:
-            self._entries.pop(entry.name, None)
-        return stale
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -274,10 +265,6 @@ class EmbeddingStore:
         self.invalidations += len(doomed)
         return len(doomed)
 
-    def confirmed_entries(self) -> List[EsEntry]:
-        """The mappings this router is willing to teach others."""
-        return [e for e in self._items.values() if e.confirmed]
-
     def __len__(self) -> int:
         return len(self._items)
 
@@ -302,7 +289,3 @@ class EmbeddingStore:
         """
         return sum(len(e.variant) + len(e.canonical) + 24 for e in self._items.values())
 
-
-def iter_names(entries: Iterable[EsEntry]) -> Iterator[str]:
-    for entry in entries:
-        yield entry.variant

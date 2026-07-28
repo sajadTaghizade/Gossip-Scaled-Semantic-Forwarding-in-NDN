@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 _interest_ids = itertools.count(1)
 
@@ -31,7 +31,7 @@ class SemanticTag:
     The tag names the canonical prefix outright rather than a signature of it.
     That is a measured choice: signature matching picks the right FIB entry only
     a third of the time at 64 bits and 84% at 1024 (see
-    ``experiments/bench_simhash.py``), because service names within a domain sit
+    ``experiments/bench_micro.py``), because service names within a domain sit
     too close together for locality-sensitive hashing to separate.  Carrying the
     prefix costs a few dozen bytes and is exact, so downstream routers resolve
     it with an ordinary FIB lookup and never load an encoder.
@@ -56,7 +56,6 @@ class Interest:
     tag: Optional[SemanticTag] = None
     hop_count: int = 0
     id: int = field(default_factory=lambda: next(_interest_ids))
-    path: List[str] = field(default_factory=list)
 
     #: Ground truth, carried alongside the packet purely for scoring. A router
     #: never reads this -- it exists so the harness can tell a correct
@@ -68,10 +67,6 @@ class Interest:
     def wire_bytes(self) -> int:
         size = len(self.name.encode()) + INTEREST_OVERHEAD_BYTES
         return size + (self.tag.wire_bytes if self.tag else 0)
-
-    def with_tag(self, tag: SemanticTag) -> "Interest":
-        self.tag = tag
-        return self
 
     @property
     def lookup_name(self) -> str:
@@ -124,7 +119,6 @@ class Nack:
 
 
 #: Reasons a request ends, recorded per Interest for the outcome breakdown.
-OUTCOME_EXACT = "exact"                # matched the FIB verbatim, fast path
 OUTCOME_ES_HIT = "es_hit"              # served from a learned mapping
 OUTCOME_GOSSIP_HIT = "gossip_hit"      # served from a mapping learned elsewhere
 OUTCOME_SEMANTIC = "semantic"          # resolved by running the encoder
@@ -132,7 +126,3 @@ OUTCOME_TAGGED = "tagged"              # forwarded on an upstream router's tag
 OUTCOME_NACK = "nack"                  # rejected, no sufficiently similar route
 OUTCOME_MISDELIVERED = "misdelivered"  # forwarded confidently to the wrong producer
 OUTCOME_TIMEOUT = "timeout"            # PIT entry expired
-
-RESOLVED_OUTCOMES = frozenset(
-    {OUTCOME_EXACT, OUTCOME_ES_HIT, OUTCOME_GOSSIP_HIT, OUTCOME_SEMANTIC, OUTCOME_TAGGED}
-)

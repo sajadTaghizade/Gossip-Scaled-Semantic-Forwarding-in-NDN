@@ -8,7 +8,7 @@ strategy slot.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -65,14 +65,6 @@ class ScenarioConfig:
 
     def with_seed(self, seed: int) -> "ScenarioConfig":
         return replace(self, seed=seed, workload=replace(self.workload, seed=seed))
-
-    def describe(self) -> Dict[str, object]:
-        data = asdict(self)
-        data["workload"] = asdict(self.workload)
-        data["links"] = asdict(self.links)
-        data["bundle_dir"] = str(self.bundle_dir) if self.bundle_dir else None
-        data["costs_path"] = str(self.costs_path) if self.costs_path else None
-        return data
 
 
 @dataclass
@@ -255,19 +247,3 @@ def _router_metrics(routers: Sequence[Router], now: float) -> Dict[str, float]:
         "es_hit_ratio_mean": sum(r.es.hit_ratio for r in routers) / len(routers),
         "pit_aggregated": sum(r.pit.aggregated for r in routers),
     }
-
-
-def run_repeated(
-    config: ScenarioConfig,
-    seeds: Sequence[int],
-    *,
-    backend: Optional[EmbeddingBackend] = None,
-    catalog=None,
-) -> List[RunResult]:
-    """Run the same scenario under several seeds, reusing the loaded model."""
-    catalog = catalog or datasets.load(config.domain)
-    backend = backend or PrecomputedBackend(config.bundle_path())
-    return [
-        run_once(config.with_seed(seed), backend=backend, catalog=catalog)
-        for seed in seeds
-    ]

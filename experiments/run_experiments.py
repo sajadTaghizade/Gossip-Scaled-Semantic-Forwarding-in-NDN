@@ -44,7 +44,6 @@ COSTS_PATH = ROOT / "data" / "costs.json"
 
 SEMANTIC_STRATEGIES = ("saf", "saf+es", "gs-ndn")
 ALL_STRATEGIES = ("vanilla-ndn",) + SEMANTIC_STRATEGIES
-ABLATIONS = ("gs-ndn", "gs-ndn-no-gossip", "gs-ndn-no-verify", "gs-ndn-no-edge-tag")
 
 REPORT_COLUMNS = (
     "isr", "precision", "recall", "f1", "false_positive_rate",

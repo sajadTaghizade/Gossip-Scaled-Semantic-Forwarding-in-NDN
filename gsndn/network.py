@@ -11,7 +11,7 @@ is a difference in policy rather than in bookkeeping.
 
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -128,8 +128,6 @@ class Router(Node):
         self.encoder_runs = 0
         self.bytes_tx = 0
         self.bytes_rx = 0
-        self.energy_j = 0.0
-        self.outcome_counts: Dict[str, int] = defaultdict(int)
 
     # -- ingress ---------------------------------------------------------
 
@@ -144,7 +142,6 @@ class Router(Node):
     def _serve_interest(self, interest: Interest, in_face: str) -> Tuple[float, Callable[[], None]]:
         """Run the forwarding pipeline; return its cost and its effect."""
         interest.hop_count += 1
-        interest.path.append(self.id)
 
         # Content Store: exact match only, by architectural rule.
         cached = self.cs.get(interest.lookup_name)
@@ -180,7 +177,6 @@ class Router(Node):
         return resolution.cpu_ms, lambda: self._apply(resolution, interest, entry, in_face)
 
     def _apply(self, resolution: Resolution, interest: Interest, pit_entry, in_face: str) -> None:
-        self.outcome_counts[resolution.outcome] += 1
         if not resolution.forwards:
             self.pit.satisfy(pit_entry.name)
             self._reject(interest, in_face, resolution.outcome)

@@ -11,7 +11,7 @@ forwarded something, not how often it forwarded something correct.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 # Interest name kinds.
 EXACT = "exact"            # verbatim copy of a canonical service name
@@ -87,12 +87,6 @@ class NameCatalog:
     def by_kind(self, kind: str) -> List[InterestName]:
         return [i for i in self.interests if i.kind == kind]
 
-    def producer_of(self, canonical: str) -> str:
-        for service in self.services:
-            if service.canonical == canonical:
-                return service.producer
-        raise KeyError(canonical)
-
     def summary(self) -> Dict[str, int]:
         return {
             "services": len(self.services),
@@ -102,16 +96,6 @@ class NameCatalog:
             VARIANT: len(self.by_kind(VARIANT)),
             DISTRACTOR: len(self.by_kind(DISTRACTOR)),
         }
-
-
-def dedupe_preserving_order(items: Iterable[str]) -> List[str]:
-    seen: set[str] = set()
-    out: List[str] = []
-    for item in items:
-        if item not in seen:
-            seen.add(item)
-            out.append(item)
-    return out
 
 
 def name_to_text(ndn_name: str) -> str:

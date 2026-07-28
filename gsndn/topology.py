@@ -42,13 +42,6 @@ class Topology:
     def routers(self) -> List[Router]:
         return self.network.routers()
 
-    def consumer_nodes(self) -> List[Consumer]:
-        return [self.network.nodes[c] for c in self.consumers]  # type: ignore[misc]
-
-    def edge_of(self, consumer_id: str) -> str:
-        consumer = self.network.nodes[consumer_id]
-        return consumer.upstream  # type: ignore[attr-defined]
-
     def summary(self) -> Dict[str, int]:
         return {
             "routers": len(self.routers),
@@ -262,20 +255,3 @@ def grid(
         cores=[n.id for n in network.routers() if n.role == "core"],
         consumers=consumers, producers=producer_ids, kind="grid",
     )
-
-
-BUILDERS = {
-    "single_edge": single_edge,
-    "multi_edge": multi_edge,
-    "grid": grid,
-}
-
-
-def build(kind: str, sim: Simulator, names: Sequence[str], **kwargs) -> Topology:
-    try:
-        builder = BUILDERS[kind]
-    except KeyError:
-        raise ValueError(
-            f"unknown topology {kind!r}; expected one of {sorted(BUILDERS)}"
-        ) from None
-    return builder(sim, names, **kwargs)
