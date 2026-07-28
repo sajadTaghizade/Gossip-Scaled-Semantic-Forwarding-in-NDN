@@ -1,0 +1,32 @@
+{
+  "domain": "city-grounded",
+  "backend": "onnx",
+  "model": "all-MiniLM-L6-v2-onnx",
+  "dim": 384,
+  "n_names": 800,
+  "bytes_per_entry": 1536,
+  "catalog_summary": {
+    "services": 50,
+    "producers": 30,
+    "interests": 800,
+    "exact": 50,
+    "variant": 350,
+    "distractor": 400
+  },
+  "cost": {
+    "encode_ms": 5.749130500021238,
+    "batch_ms": {
+      "1": 5.749130500021238,
+      "2": 7.119214999875112,
+      "4": 12.902711999913663,
+      "8": 20.127624999986438,
+      "16": 35.93205399988619,
+      "32": 65.48845599991182,
+      "64": 164.99764000013784
+    },
+    "model_load_ms": 166.25961099998676,
+    "resident_mb": 223.79296875,
+    "measured": true
+  },
+  "cost_borrowed_from": "city.all-MiniLM-L6-v2-onnx.json"
+}

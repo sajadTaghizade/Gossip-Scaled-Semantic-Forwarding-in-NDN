@@ -1,0 +1,32 @@
+{
+  "domain": "hospital-grounded",
+  "backend": "lexical",
+  "model": "lexical-char35-512",
+  "dim": 512,
+  "n_names": 800,
+  "bytes_per_entry": 2048,
+  "catalog_summary": {
+    "services": 50,
+    "producers": 30,
+    "interests": 800,
+    "exact": 50,
+    "variant": 350,
+    "distractor": 400
+  },
+  "cost": {
+    "encode_ms": 0.09611050006697042,
+    "batch_ms": {
+      "1": 0.09611050006697042,
+      "2": 0.10866000002351939,
+      "4": 0.16135600003508443,
+      "8": 0.2531069999349711,
+      "16": 0.4510569999638392,
+      "32": 0.9030989999700978,
+      "64": 1.9268340001872275
+    },
+    "model_load_ms": 0.0,
+    "resident_mb": 123.140625,
+    "measured": true
+  },
+  "cost_borrowed_from": "hospital.lexical-char35-512.json"
+}

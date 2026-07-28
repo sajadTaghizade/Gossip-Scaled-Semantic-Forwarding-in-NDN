@@ -21,6 +21,8 @@ Experiments:
 ``ablation``    GS-NDN with each of its mechanisms removed in turn
 ``energy``      radio and compute energy, including the SEF baseline
 ``encoder``     MiniLM against the lexical control
+``ontology``    invented synonyms against ones transcribed from published
+                IoT ontologies (Brick, SAREF, Haystack, SSN/SOSA)
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gsndn import datasets  # noqa: E402
-from gsndn.embeddings import PrecomputedBackend  # noqa: E402
+from gsndn.embeddings import NameIndex, PrecomputedBackend  # noqa: E402
 from gsndn.metrics import aggregate, format_table  # noqa: E402
 from gsndn.runner import RunResult, ScenarioConfig, run_once  # noqa: E402
 from gsndn.adversary import AdversaryConfig  # noqa: E402
@@ -636,6 +638,89 @@ def exp_heterogeneity(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_ontology(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Are the invented synonyms easier than the ones somebody standardised?
+
+    The catalogs are generated from a lexicon we wrote, so the recognition
+    results could in principle be measuring our lexicon rather than the encoder.
+    The grounded catalogs add a seventh rewording per service taken from Brick
+    Schema, SAREF, Project Haystack or W3C SSN/SOSA where those vocabularies name
+    the quantity at all -- see :mod:`gsndn.datasets.ontology` for the table and
+    for what it does not fix.
+
+    The headline measurement is deterministic and needs no seeds, because it is
+    a property of the encoder and the names rather than of the simulation: for
+    every reworded name, does the true service come out top of a cosine search
+    over the FIB, and at what score. Grouping that by rewrite family puts the
+    ontology-sourced wordings directly against the invented ones on the same
+    catalog and the same encoder.
+
+    ``ontology`` counts only the services a published vocabulary actually names.
+    ``ontology-fallback`` is the rest of that family -- clinical metrics and bus
+    timetables, which no building or sensing ontology models -- and is reported
+    separately rather than averaged in, because averaging it in would let our own
+    lexicon flatter a number labelled as standardised.
+    """
+    out: Dict[str, object] = {}
+    for domain in datasets.GROUNDED_DOMAINS:
+        catalog = datasets.load(domain)
+        backend = PrecomputedBackend(
+            ROOT / "data" / "embeddings" / f"{domain}.{bench.model}.npz"
+        )
+        index = NameIndex(backend, catalog.canonical_names)
+        families = catalog.metadata["rewrite_family"]
+
+        per_family: Dict[str, Dict[str, float]] = {}
+        for interest in catalog.by_kind(datasets.VARIANT):
+            family = families.get(interest.name, "unknown")
+            bucket = per_family.setdefault(
+                family, {"n": 0, "rank1": 0, "true_score": 0.0, "best_score": 0.0}
+            )
+            query = backend.encode([interest.name])[0]
+            scores = index.similarities(query)
+            best = int(scores.argmax())
+            bucket["n"] += 1
+            bucket["rank1"] += int(index.names[best] == interest.expected)
+            bucket["true_score"] += float(scores[index.names.index(interest.expected)])
+            bucket["best_score"] += float(scores[best])
+
+        rows = {
+            family: {
+                "n": data["n"],
+                "rank1": data["rank1"] / data["n"],
+                "mean_true_score": data["true_score"] / data["n"],
+                "mean_best_score": data["best_score"] / data["n"],
+            }
+            for family, data in sorted(per_family.items())
+        }
+        out[domain] = {
+            "recognition": rows,
+            "coverage": catalog.metadata["ontology"],
+        }
+        print(f"\n--- {domain}: recognition by rewrite family ---")
+        for family, data in rows.items():
+            print(f"  {family:<20} n={data['n']:<4} rank-1 {data['rank1']:.3f}  "
+                  f"score to true service {data['mean_true_score']:.3f}")
+
+    # And end to end, on the grounded catalogs, at the campaign's operating
+    # point. Not comparable line-for-line with section 1's table -- a grounded
+    # catalog has a seventh wording per service and a larger distractor set, so
+    # it is a different dataset -- but it says whether the pipeline behaves at
+    # all on names it did not invent.
+    grounded_bench = Bench(datasets.GROUNDED_DOMAINS, bench.model)
+    end_to_end: Dict[str, object] = {}
+    for domain in datasets.GROUNDED_DOMAINS:
+        rows = {}
+        for strategy in ("saf+es", "gs-ndn", "rc-ndn"):
+            config = base_config(domain, strategy=strategy, epsilon=0.2, n_edges=8)
+            rows[strategy] = aggregate(grounded_bench.metrics(config, seeds))
+        end_to_end[domain] = rows
+        print(f"\n--- {domain}: end to end ---")
+        print(format_table(rows, ("isr", "precision", "risk_realised_error")))
+    out["end_to_end"] = end_to_end
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
     "risk": exp_risk,
     "churn": exp_churn,
@@ -644,6 +729,7 @@ EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
     "main": exp_main,
     "threshold": exp_threshold,
     "threshold_transfer": exp_threshold_transfer,
+    "ontology": exp_ontology,
     "rate": exp_rate,
     "scaling": exp_scaling,
     "convergence": exp_convergence,

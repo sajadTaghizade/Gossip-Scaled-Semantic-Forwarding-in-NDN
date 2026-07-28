@@ -19,6 +19,19 @@ namespaces actually diverge:
 Each family draws from the lexicon with a deterministic rotation keyed on the
 service index, so distinct services get distinct wordings while the whole
 catalog is a pure function of the lexicon.
+
+A seventh family, ``ontology``, is available and off by default:
+
+7. ``ontology``     -- the metric named with a class name transcribed from
+                       Brick Schema, SAREF, Project Haystack or W3C SSN/SOSA
+
+It exists because the six above are ours, and a reviewer is entitled to ask
+whether the recognition results measure the method or measure our lexicon. See
+:mod:`gsndn.datasets.ontology` for what it does and does not fix. It is off by
+default deliberately: switching it on changes the catalog, and therefore every
+number in ``RESULTS.md``, so the grounded catalogs are separate domains
+(``hospital-grounded``, ``city-grounded``) measured separately rather than a
+silent redefinition of the ones the campaign already ran on.
 """
 
 from __future__ import annotations
@@ -26,6 +39,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
+from . import ontology
 from .schema import (
     DISTRACTOR,
     EXACT,
@@ -138,6 +152,21 @@ def _verbose(lex: DomainLexicon, m: MetricFamily, p: Placement, i: int) -> str:
     )
 
 
+def _ontology(lex: DomainLexicon, m: MetricFamily, p: Placement, i: int) -> str:
+    """Name the metric with a class name somebody else standardised.
+
+    Falls back to the invented lexicon when no published vocabulary names this
+    quantity -- which is the case for every clinical metric family, since Brick,
+    SAREF, Haystack and SSN/SOSA are building and sensing vocabularies and none
+    of them models a glucose monitor. The fallback is counted separately in the
+    catalog metadata so the grounded share is never overstated.
+    """
+    term = ontology.pick(m.key, i)
+    metric = term.term if term is not None else m.pick(i + 6)
+    root = lex.root_synonyms[(i + 5) % len(lex.root_synonyms)]
+    return _join(root, p.group_short, metric, p.instance)
+
+
 REWRITES: Sequence[Tuple[str, Callable[[DomainLexicon, MetricFamily, Placement, int], str]]] = (
     ("synonym", _synonym),
     ("abbreviated", _abbreviated),
@@ -147,10 +176,17 @@ REWRITES: Sequence[Tuple[str, Callable[[DomainLexicon, MetricFamily, Placement, 
     ("verbose", _verbose),
 )
 
+#: Appended to ``REWRITES`` only when a catalog is built grounded.
+ONTOLOGY_REWRITE: Tuple[str, Callable[[DomainLexicon, MetricFamily, Placement, int], str]] = (
+    "ontology", _ontology,
+)
+
 
 def build_catalog(
     lex: DomainLexicon,
     n_distractors: Optional[int] = None,
+    *,
+    grounded: bool = False,
 ) -> NameCatalog:
     """Compose a full catalog: services, exact names, variants and distractors.
 
@@ -158,9 +194,14 @@ def build_catalog(
     reproduces SAF's harder configuration where only half of the offered traffic
     corresponds to an actually available service.
     """
+    rewrites = tuple(REWRITES) + ((ONTOLOGY_REWRITE,) if grounded else ())
+    wanted_variants = VARIANTS_PER_SERVICE + (1 if grounded else 0)
+
     services: List[Service] = []
     interests: List[InterestName] = []
-    rewrite_counts: Dict[str, int] = {name: 0 for name, _ in REWRITES}
+    rewrite_counts: Dict[str, int] = {name: 0 for name, _ in rewrites}
+    family: Dict[str, str] = {}
+    ontology_terms = 0
 
     index = 0
     for metric in lex.metrics:
@@ -179,13 +220,22 @@ def build_catalog(
             interests.append(InterestName(canonical, EXACT, canonical))
 
             generated: List[str] = []
-            for label, rewrite in REWRITES:
+            for label, rewrite in rewrites:
                 candidate = rewrite(lex, metric, placement, index)
                 if candidate != canonical and candidate not in generated:
                     generated.append(candidate)
                     rewrite_counts[label] += 1
-            check_variant_budget(generated, VARIANTS_PER_SERVICE, canonical)
-            for variant in generated[:VARIANTS_PER_SERVICE]:
+                    # Which family produced a name is not recoverable from the
+                    # name itself, and the grounded experiment has to compare
+                    # families against each other, so record it here.
+                    family[candidate] = label
+                    if label == "ontology":
+                        if ontology.pick(metric.key, index) is not None:
+                            ontology_terms += 1
+                        else:
+                            family[candidate] = "ontology-fallback"
+            check_variant_budget(generated, wanted_variants, canonical)
+            for variant in generated[:wanted_variants]:
                 interests.append(InterestName(variant, VARIANT, canonical))
             index += 1
 
@@ -193,15 +243,27 @@ def build_catalog(
     wanted = resolvable if n_distractors is None else n_distractors
     interests.extend(_build_distractors(lex, wanted, taken={i.name for i in interests}))
 
+    metadata: Dict[str, object] = {
+        "variants_per_service": wanted_variants,
+        "rewrite_counts": rewrite_counts,
+        "resolvable_fraction": round(resolvable / len(interests), 4),
+        "grounded": grounded,
+        "rewrite_family": family,
+    }
+    if grounded:
+        # Carried on the catalog so that any result computed from it states its
+        # own grounded share rather than relying on a claim made elsewhere.
+        metadata["ontology"] = {
+            "terms_from_standards": ontology_terms,
+            "invented_fallbacks": rewrite_counts.get("ontology", 0) - ontology_terms,
+            **ontology.coverage([m.key for m in lex.metrics]),
+        }
+
     return NameCatalog(
         domain=lex.domain,
         services=services,
         interests=interests,
-        metadata={
-            "variants_per_service": VARIANTS_PER_SERVICE,
-            "rewrite_counts": rewrite_counts,
-            "resolvable_fraction": round(resolvable / len(interests), 4),
-        },
+        metadata=metadata,
     )
 
 

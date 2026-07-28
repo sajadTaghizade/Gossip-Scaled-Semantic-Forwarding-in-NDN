@@ -111,6 +111,13 @@ LEXICON = DomainLexicon(
 )
 
 
-def catalog(n_distractors: int | None = None) -> NameCatalog:
-    """Build the Smart City catalog (50 services, 350 resolvable names)."""
-    return build_catalog(LEXICON, n_distractors=n_distractors)
+def catalog(n_distractors: int | None = None, *, grounded: bool = False) -> NameCatalog:
+    """Build the Smart City catalog (50 services, 350 resolvable names).
+
+    ``grounded`` adds a seventh rewording per service from a published ontology.
+    Coverage is better here than in the hospital domain -- Brick, SAREF,
+    Haystack and SSN/SOSA between them name energy, water, lighting, air
+    quality, sound, occupancy, parking and waste level -- but transit timetables
+    have no class in any of the four and fall back to the invented lexicon.
+    """
+    return build_catalog(LEXICON, n_distractors=n_distractors, grounded=grounded)

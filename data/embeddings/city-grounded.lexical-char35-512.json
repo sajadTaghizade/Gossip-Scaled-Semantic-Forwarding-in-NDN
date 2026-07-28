@@ -1,0 +1,32 @@
+{
+  "domain": "city-grounded",
+  "backend": "lexical",
+  "model": "lexical-char35-512",
+  "dim": 512,
+  "n_names": 800,
+  "bytes_per_entry": 2048,
+  "catalog_summary": {
+    "services": 50,
+    "producers": 30,
+    "interests": 800,
+    "exact": 50,
+    "variant": 350,
+    "distractor": 400
+  },
+  "cost": {
+    "encode_ms": 0.09631249997710256,
+    "batch_ms": {
+      "1": 0.09631249997710256,
+      "2": 0.11183899982825096,
+      "4": 0.1638570001887274,
+      "8": 0.2769529999113729,
+      "16": 0.47065300009307975,
+      "32": 0.8631209998384293,
+      "64": 1.950149999856876
+    },
+    "model_load_ms": 0.0,
+    "resident_mb": 123.6796875,
+    "measured": true
+  },
+  "cost_borrowed_from": "city.lexical-char35-512.json"
+}

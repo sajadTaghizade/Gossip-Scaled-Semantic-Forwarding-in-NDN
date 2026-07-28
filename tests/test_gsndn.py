@@ -16,7 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gsndn import datasets  # noqa: E402
-from gsndn.datasets import DISTRACTOR, EXACT, VARIANT  # noqa: E402
+from gsndn.datasets import DISTRACTOR, EXACT, VARIANT, ontology  # noqa: E402
 from gsndn.des import ServiceQueue, Simulator, Stopwatch  # noqa: E402
 from gsndn.embeddings import NameIndex, PrecomputedBackend  # noqa: E402
 from gsndn.metrics import CORRECT, MISDELIVERED, Collector, aggregate, summarise  # noqa: E402
@@ -292,6 +292,39 @@ def test_consumers_get_overlapping_but_distinct_slices():
         per_consumer.setdefault(request.consumer, set()).add(request.expected)
     sets = [s - {None} for s in per_consumer.values()]
     assert len(set.union(*sets)) > max(len(s) for s in sets)
+
+
+# --- ontology grounding -----------------------------------------------------
+
+
+@pytest.mark.parametrize("domain", ["hospital", "city"])
+def test_grounding_leaves_the_reported_catalogs_untouched(domain):
+    """The campaign's numbers must not move because a new dataset was added."""
+    base = datasets.load(domain)
+    grounded = datasets.load(f"{domain}-grounded")
+    assert base.canonical_names == grounded.canonical_names
+    base_names = {i.name for i in base.interests}
+    assert base_names < {i.name for i in grounded.interests}
+    assert base.metadata["variants_per_service"] == 6
+    assert grounded.metadata["variants_per_service"] == 7
+
+
+@pytest.mark.parametrize("domain", ["hospital-grounded", "city-grounded"])
+def test_grounded_catalog_reports_how_much_of_it_is_grounded(domain):
+    meta = datasets.load(domain).metadata["ontology"]
+    assert meta["terms_from_standards"] > 0
+    # Fallbacks are counted, not hidden: no published vocabulary names a
+    # glucose monitor or a bus timetable.
+    assert meta["terms_from_standards"] + meta["invented_fallbacks"] == 50
+    assert set(meta["ungrounded_keys"]).isdisjoint(meta["grounded_keys"])
+
+
+def test_every_ontology_term_names_its_source():
+    for key, terms in ontology.TERMS.items():
+        assert terms, key
+        for term in terms:
+            assert term.standard in ontology.STANDARDS
+            assert term.source_name, term.term
 
 
 # --- adaptive conformal inference -------------------------------------------

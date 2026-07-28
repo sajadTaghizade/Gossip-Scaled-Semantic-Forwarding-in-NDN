@@ -103,6 +103,14 @@ LEXICON = DomainLexicon(
 )
 
 
-def catalog(n_distractors: int | None = None) -> NameCatalog:
-    """Build the Smart Hospital catalog (50 services, 350 resolvable names)."""
-    return build_catalog(LEXICON, n_distractors=n_distractors)
+def catalog(n_distractors: int | None = None, *, grounded: bool = False) -> NameCatalog:
+    """Build the Smart Hospital catalog (50 services, 350 resolvable names).
+
+    ``grounded`` adds a seventh rewording per service taken from a published
+    ontology where one exists. Only the environmental families -- temperature,
+    humidity, air quality, occupancy -- have one; Brick, SAREF, Haystack and
+    SSN/SOSA model buildings and sensing, not clinical devices, so heart rate,
+    blood pressure, oxygen, respiration, glucose and infusion fall back to the
+    invented lexicon and are counted as fallbacks.
+    """
+    return build_catalog(LEXICON, n_distractors=n_distractors, grounded=grounded)

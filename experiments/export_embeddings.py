@@ -90,7 +90,9 @@ def measure_cost(backend: EmbeddingBackend, samples: list[str]) -> EncoderCost:
     return cost
 
 
-def export(domain: str, kind: str, out_dir: Path) -> Path:
+def export(
+    domain: str, kind: str, out_dir: Path, cost_from: Path | None = None
+) -> Path:
     catalog = datasets.load(domain)
     names = sorted(set(catalog.all_names))
 
@@ -107,11 +109,22 @@ def export(domain: str, kind: str, out_dir: Path) -> Path:
     vectors = l2_normalize(vectors)
 
     texts = [name_to_text(n) for n in names]
-    cost = measure_cost(backend, texts[:64])
-    print(
-        f"[{domain}] encode cost: {cost.encode_ms:.2f} ms/name single, "
-        f"{cost.per_name_ms(32):.3f} ms/name at batch 32"
-    )
+    if cost_from is not None:
+        # Deliberately not re-measured. Every latency in the campaign is charged
+        # from timings taken on the machine that ran it, and a bundle exported
+        # later on a different machine would quietly re-time the encoder --
+        # making its results incomparable with the committed ones for a reason
+        # that has nothing to do with the catalog being measured. Borrowing the
+        # original timings keeps the comparison about the names.
+        cost = EncoderCost.from_dict(json.loads(cost_from.read_text())["cost"])
+        print(f"[{domain}] encode cost: borrowed from {cost_from.name} "
+              f"({cost.encode_ms:.2f} ms/name single)")
+    else:
+        cost = measure_cost(backend, texts[:64])
+        print(
+            f"[{domain}] encode cost: {cost.encode_ms:.2f} ms/name single, "
+            f"{cost.per_name_ms(32):.3f} ms/name at batch 32"
+        )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     slug = backend.id.replace("/", "_")
@@ -133,6 +146,7 @@ def export(domain: str, kind: str, out_dir: Path) -> Path:
                 "bytes_per_entry": backend.bytes_per_entry,
                 "catalog_summary": catalog.summary(),
                 "cost": cost.to_dict(),
+                "cost_borrowed_from": cost_from.name if cost_from else None,
             },
             indent=2,
         )
@@ -144,7 +158,9 @@ def export(domain: str, kind: str, out_dir: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--domain", choices=datasets.DOMAINS, help="single domain to export")
+    parser.add_argument(
+        "--domain", choices=datasets.ALL_DOMAINS, help="single domain to export"
+    )
     parser.add_argument("--all", action="store_true", help="export every domain")
     parser.add_argument(
         "--backend",
@@ -153,6 +169,16 @@ def main() -> int:
         help="encoder to export with (default: onnx MiniLM-L6)",
     )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output directory")
+    parser.add_argument(
+        "--cost-from",
+        type=Path,
+        default=None,
+        help=(
+            "reuse the measured encoder timings from an existing sidecar instead "
+            "of re-measuring; use this when exporting an extra catalog on a "
+            "machine other than the one the campaign was timed on"
+        ),
+    )
     args = parser.parse_args()
 
     if not args.all and not args.domain:
@@ -160,7 +186,7 @@ def main() -> int:
 
     targets = datasets.DOMAINS if args.all else (args.domain,)
     for domain in targets:
-        export(domain, args.backend, args.out)
+        export(domain, args.backend, args.out, args.cost_from)
     return 0
 
 
