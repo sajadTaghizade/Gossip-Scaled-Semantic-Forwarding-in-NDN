@@ -90,11 +90,15 @@ class ServiceQueue:
     Modelling this is the reason a strategy's benefit is superlinear under load.
     """
 
+    #: A unit of work: run at service start, returns how long it takes and what
+    #: to do once that time has elapsed.
+    Work = Callable[[], Tuple[float, Callable[[], None]]]
+
     def __init__(self, sim: Simulator, name: str = "cpu", capacity: Optional[int] = None):
         self.sim = sim
         self.name = name
         self.capacity = capacity
-        self._pending: Deque[Tuple[float, Callable[..., None], Tuple[Any, ...]]] = deque()
+        self._pending: Deque[Tuple[float, "ServiceQueue.Work"]] = deque()
         self._busy = False
 
         self.jobs_served = 0
@@ -103,44 +107,40 @@ class ServiceQueue:
         self.total_wait = 0.0
         self.max_queue_len = 0
 
-    def submit(
-        self,
-        service_time: float,
-        callback: Callable[..., None],
-        *args: Any,
-        on_drop: Optional[Callable[..., None]] = None,
-    ) -> bool:
-        """Queue one job. Returns False when a bounded queue is full."""
+    def submit(self, work: "ServiceQueue.Work", on_drop: Optional[Callable[[], None]] = None) -> bool:
+        """Queue one job. Returns False when a bounded queue is full.
+
+        The job decides its own duration, but only once it reaches the head of
+        the queue.  That ordering matters: whether an Interest costs an encoder
+        run or a cache hit depends on what the router has learned by the time it
+        is actually served, not by the time it arrived.
+        """
         if self.capacity is not None and len(self._pending) >= self.capacity:
             self.jobs_dropped += 1
             if on_drop is not None:
-                on_drop(*args)
+                on_drop()
             return False
-        self._pending.append((self.sim.now, callback, args))
+        self._pending.append((self.sim.now, work))
         self.max_queue_len = max(self.max_queue_len, len(self._pending))
         if not self._busy:
-            self._start_next(service_time)
-        else:
-            # Service time is recomputed when the job actually reaches the head
-            # of the queue, so remember it alongside the job.
-            self._pending[-1] = (self.sim.now, callback, args + (service_time,))
+            self._start_next()
         return True
 
-    def _start_next(self, service_time: Optional[float] = None) -> None:
+    def _start_next(self) -> None:
         if not self._pending:
             self._busy = False
             return
-        enqueued_at, callback, args = self._pending.popleft()
-        if service_time is None:
-            args, service_time = args[:-1], args[-1]  # type: ignore[assignment]
+        enqueued_at, work = self._pending.popleft()
         self._busy = True
         self.total_wait += self.sim.now - enqueued_at
-        self.busy_time += float(service_time)
-        self.sim.schedule(float(service_time), self._complete, callback, args)
+        duration, finish = work()
+        duration = max(0.0, float(duration))
+        self.busy_time += duration
+        self.sim.schedule(duration, self._complete, finish)
 
-    def _complete(self, callback: Callable[..., None], args: Tuple[Any, ...]) -> None:
+    def _complete(self, finish: Callable[[], None]) -> None:
         self.jobs_served += 1
-        callback(*args)
+        finish()
         self._start_next()
 
     @property

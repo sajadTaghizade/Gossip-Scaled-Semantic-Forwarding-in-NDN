@@ -38,7 +38,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import AbstractSet, Dict, List, Optional, Sequence
 
 import numpy as np
 
@@ -368,17 +368,31 @@ class NameIndex:
         return self.vectors @ np.asarray(query, dtype=np.float32).reshape(-1)
 
     def best_match(
-        self, query: np.ndarray, threshold: float
+        self,
+        query: np.ndarray,
+        threshold: float,
+        exclude: Optional[AbstractSet[str]] = None,
     ) -> Optional[tuple[str, float]]:
         """Highest-scoring entry at or above ``threshold``, else ``None``.
 
         Ties are broken by catalog order, which is deterministic; SAF breaks
         them by lowest round-trip time, a refinement that only matters when two
         entries score bit-identically.
+
+        ``exclude`` skips entries already known not to serve this name.  An
+        encoder is deterministic, so without it a second attempt at a name would
+        return the same wrong answer as the first; the exclusion set is what
+        turns a Nack into information rather than just a failure.
         """
         scores = self.similarities(query)
         if scores.size == 0:
             return None
+        if exclude:
+            scores = scores.copy()
+            for name in exclude:
+                position = self._position.get(name)
+                if position is not None:
+                    scores[position] = -np.inf
         best = int(np.argmax(scores))
         score = float(scores[best])
         return (self.names[best], score) if score >= threshold else None
