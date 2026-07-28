@@ -23,6 +23,9 @@ Experiments:
 ``encoder``     MiniLM against the lexical control
 ``ontology``    invented synonyms against ones transcribed from published
                 IoT ontologies (Brick, SAREF, Haystack, SSN/SOSA)
+``churn``       producers that move, and producers that quietly narrow what
+                they answer to
+``drift_paired`` the drift arm's separations, paired seed by seed
 """
 
 from __future__ import annotations
@@ -561,6 +564,93 @@ def exp_churn(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_drift_paired(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """The drift arm's separations, tested pairwise on identical seeds.
+
+    ``exp_churn`` reports each strategy's mean with its own confidence interval,
+    and the differences under schema drift are small enough that those intervals
+    overlap while the underlying difference is real: every arm sees the same
+    workload, the same drift events and the same producers, so the seed-to-seed
+    variation the intervals are made of is shared and cancels. This runs the
+    hardest drift point only, pairs the runs by seed, and reports the
+    distribution of the difference rather than the difference of the means.
+
+    Two baselines, because two different questions are being asked.
+
+    Against ``gs-ndn-no-verify``: does verification pay under an event only a
+    producer refusal can detect? That is the question the move arm could not
+    answer, and the reason this arm exists.
+
+    Against ``rc-ndn``: does an adaptive budget beat a fixed one when the
+    distribution moves under it? Adaptive Conformal Inference is motivated
+    entirely by exchangeability failing, and schema drift is exchangeability
+    failing, so this is the arm where it should show if it shows anywhere.
+    """
+    baselines = ("gs-ndn-no-verify", "rc-ndn")
+    arms = ("saf+es", "gs-ndn", "gs-ndn-no-verify", "rc-ndn", "rc-ndn-aci")
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        per_strategy: Dict[str, List[Dict[str, float]]] = {}
+        for strategy in arms:
+            config = base_config(
+                domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                churn=ChurnConfig(interval_s=1.0, drift_share=1.0),
+            )
+            per_strategy[strategy] = bench.metrics(config, seeds)
+
+        against: Dict[str, object] = {}
+        for baseline in baselines:
+            rows: Dict[str, object] = {}
+            for strategy in arms:
+                if strategy == baseline:
+                    continue
+                entry: Dict[str, object] = {}
+                for metric in ("isr", "producer_refusal_rate", "risk_realised_error"):
+                    deltas = [
+                        a[metric] - b[metric]
+                        for a, b in zip(per_strategy[strategy], per_strategy[baseline])
+                    ]
+                    entry[metric] = _paired(deltas)
+                rows[strategy] = entry
+            against[baseline] = rows
+
+            print(f"\n--- {domain}: schema drift at 1 s, paired against {baseline} ---")
+            for strategy, entry in rows.items():
+                isr = entry["isr"]
+                refused = entry["producer_refusal_rate"]
+                print(
+                    f"  {strategy:<18} ISR {isr['mean']:+.4f}±{isr['ci95']:.4f} "
+                    f"[{'resolved' if isr['resolved'] else 'not resolved'}]  "
+                    f"refusals {refused['mean']:+.4f}±{refused['ci95']:.4f} "
+                    f"[{'resolved' if refused['resolved'] else 'not resolved'}]  "
+                    f"wins {isr['wins']}/{isr['n']}"
+                )
+        out[domain] = against
+    return out
+
+
+def _paired(deltas: Sequence[float]) -> Dict[str, float]:
+    """Mean paired difference, its interval, and how often it had the sign."""
+    import math
+
+    n = len(deltas)
+    mean = sum(deltas) / n
+    if n > 1:
+        variance = sum((d - mean) ** 2 for d in deltas) / (n - 1)
+        ci95 = 1.96 * math.sqrt(variance / n)
+    else:
+        ci95 = 0.0
+    return {
+        "mean": mean,
+        "ci95": ci95,
+        "n": n,
+        "wins": sum(1 for d in deltas if d > 0),
+        # Does the interval exclude zero -- i.e. is the sign of this difference
+        # something twenty seeds actually settle?
+        "resolved": abs(mean) > ci95,
+    }
+
+
 def exp_poisoning(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     """A share of routers lies, in both currencies gossip carries."""
     shares = (0.0, 0.125, 0.25, 0.5)
@@ -670,37 +760,70 @@ def exp_ontology(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
         index = NameIndex(backend, catalog.canonical_names)
         families = catalog.metadata["rewrite_family"]
 
+        # Only some services have a standardised wording at all, and they are
+        # not a random sample -- they are the environmental ones, which are also
+        # the ones the invented families handle most easily. Comparing the
+        # ontology family against invented families computed over *all* services
+        # would therefore compare two different service sets and call the
+        # difference an encoder result. Every family is scored twice: over
+        # everything, and restricted to the services a published vocabulary
+        # actually names. The restricted column is the comparable one.
+        category = {s.canonical: s.category for s in catalog.services}
+        grounded_service = {
+            canonical for canonical, key in category.items()
+            if datasets.ontology.terms_for(key)
+        }
+
+        def blank() -> Dict[str, float]:
+            return {"n": 0, "rank1": 0, "true_score": 0.0, "best_score": 0.0}
+
         per_family: Dict[str, Dict[str, float]] = {}
+        restricted: Dict[str, Dict[str, float]] = {}
         for interest in catalog.by_kind(datasets.VARIANT):
             family = families.get(interest.name, "unknown")
-            bucket = per_family.setdefault(
-                family, {"n": 0, "rank1": 0, "true_score": 0.0, "best_score": 0.0}
-            )
             query = backend.encode([interest.name])[0]
             scores = index.similarities(query)
             best = int(scores.argmax())
-            bucket["n"] += 1
-            bucket["rank1"] += int(index.names[best] == interest.expected)
-            bucket["true_score"] += float(scores[index.names.index(interest.expected)])
-            bucket["best_score"] += float(scores[best])
+            hit = int(index.names[best] == interest.expected)
+            true_score = float(scores[index.names.index(interest.expected)])
 
-        rows = {
-            family: {
-                "n": data["n"],
-                "rank1": data["rank1"] / data["n"],
-                "mean_true_score": data["true_score"] / data["n"],
-                "mean_best_score": data["best_score"] / data["n"],
+            targets = [per_family.setdefault(family, blank())]
+            if interest.expected in grounded_service:
+                targets.append(restricted.setdefault(family, blank()))
+            for bucket in targets:
+                bucket["n"] += 1
+                bucket["rank1"] += hit
+                bucket["true_score"] += true_score
+                bucket["best_score"] += float(scores[best])
+
+        def summarise_families(source: Dict[str, Dict[str, float]]):
+            return {
+                family: {
+                    "n": data["n"],
+                    "rank1": data["rank1"] / data["n"],
+                    "mean_true_score": data["true_score"] / data["n"],
+                    "mean_best_score": data["best_score"] / data["n"],
+                }
+                for family, data in sorted(source.items())
             }
-            for family, data in sorted(per_family.items())
-        }
+
+        rows = summarise_families(per_family)
+        rows_restricted = summarise_families(restricted)
         out[domain] = {
             "recognition": rows,
+            "recognition_grounded_services_only": rows_restricted,
             "coverage": catalog.metadata["ontology"],
         }
         print(f"\n--- {domain}: recognition by rewrite family ---")
+        print(f"  {'family':<20} {'all services':>22}   {'grounded services only':>24}")
         for family, data in rows.items():
-            print(f"  {family:<20} n={data['n']:<4} rank-1 {data['rank1']:.3f}  "
-                  f"score to true service {data['mean_true_score']:.3f}")
+            limited = rows_restricted.get(family)
+            cell = (
+                f"n={limited['n']:<4} rank-1 {limited['rank1']:.3f}"
+                if limited else "--"
+            )
+            print(f"  {family:<20} n={data['n']:<4} rank-1 {data['rank1']:.3f}"
+                  f"  score {data['mean_true_score']:.3f}   {cell}")
 
     # And end to end, on the grounded catalogs, at the campaign's operating
     # point. Not comparable line-for-line with section 1's table -- a grounded
@@ -724,6 +847,7 @@ def exp_ontology(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
     "risk": exp_risk,
     "churn": exp_churn,
+    "drift_paired": exp_drift_paired,
     "poisoning": exp_poisoning,
     "heterogeneity": exp_heterogeneity,
     "main": exp_main,

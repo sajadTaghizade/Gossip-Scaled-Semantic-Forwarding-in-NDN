@@ -1,0 +1,382 @@
+{
+  "hospital": {
+    "gs-ndn-no-verify": {
+      "saf+es": {
+        "isr": {
+          "mean": -3.79150489941138e-05,
+          "ci95": 0.0001698150885173895,
+          "n": 20,
+          "wins": 6,
+          "resolved": false
+        },
+        "producer_refusal_rate": {
+          "mean": 5.6669010479379336e-05,
+          "ci95": 0.00020897793500318802,
+          "n": 20,
+          "wins": 11,
+          "resolved": false
+        },
+        "risk_realised_error": {
+          "mean": 0.00014559877956124237,
+          "ci95": 0.0006772671408844958,
+          "n": 20,
+          "wins": 13,
+          "resolved": false
+        }
+      },
+      "gs-ndn": {
+        "isr": {
+          "mean": 0.005238457204827235,
+          "ci95": 0.001269444561322899,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": -0.008289699319342262,
+          "ci95": 0.0015770561820438846,
+          "n": 20,
+          "wins": 0,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": -0.003526899546522478,
+          "ci95": 0.0020974122662408435,
+          "n": 20,
+          "wins": 4,
+          "resolved": true
+        }
+      },
+      "rc-ndn": {
+        "isr": {
+          "mean": -0.025184344759567646,
+          "ci95": 0.008468782362046014,
+          "n": 20,
+          "wins": 0,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": -0.036054769343217205,
+          "ci95": 0.00822904756659168,
+          "n": 20,
+          "wins": 0,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": -0.017324217608330045,
+          "ci95": 0.005608824395234799,
+          "n": 20,
+          "wins": 0,
+          "resolved": true
+        }
+      },
+      "rc-ndn-aci": {
+        "isr": {
+          "mean": -0.016131518986515984,
+          "ci95": 0.006864128676186345,
+          "n": 20,
+          "wins": 2,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": -0.03155488341295885,
+          "ci95": 0.007799726176418837,
+          "n": 20,
+          "wins": 0,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": -0.016724834466852124,
+          "ci95": 0.006527368249863338,
+          "n": 20,
+          "wins": 1,
+          "resolved": true
+        }
+      }
+    },
+    "rc-ndn": {
+      "saf+es": {
+        "isr": {
+          "mean": 0.025146429710573532,
+          "ci95": 0.008451882678692438,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": 0.03611143835369658,
+          "ci95": 0.008339819935541535,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": 0.01746981638789128,
+          "ci95": 0.005219248281804158,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        }
+      },
+      "gs-ndn": {
+        "isr": {
+          "mean": 0.03042280196439488,
+          "ci95": 0.009109921624437738,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": 0.027765070023874943,
+          "ci95": 0.00737374268010483,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": 0.013797318061807567,
+          "ci95": 0.004306349801178313,
+          "n": 20,
+          "wins": 19,
+          "resolved": true
+        }
+      },
+      "gs-ndn-no-verify": {
+        "isr": {
+          "mean": 0.025184344759567646,
+          "ci95": 0.008468782362046014,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": 0.036054769343217205,
+          "ci95": 0.00822904756659168,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": 0.017324217608330045,
+          "ci95": 0.005608824395234799,
+          "n": 20,
+          "wins": 20,
+          "resolved": true
+        }
+      },
+      "rc-ndn-aci": {
+        "isr": {
+          "mean": 0.00905282577305166,
+          "ci95": 0.004608253928242112,
+          "n": 20,
+          "wins": 17,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": 0.004499885930258346,
+          "ci95": 0.002913693268666617,
+          "n": 20,
+          "wins": 15,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": 0.0005993831414779218,
+          "ci95": 0.002144179021524958,
+          "n": 20,
+          "wins": 11,
+          "resolved": false
+        }
+      }
+    }
+  },
+  "city": {
+    "gs-ndn-no-verify": {
+      "saf+es": {
+        "isr": {
+          "mean": -1.9672887268368244e-05,
+          "ci95": 0.00013098146048053463,
+          "n": 20,
+          "wins": 7,
+          "resolved": false
+        },
+        "producer_refusal_rate": {
+          "mean": -2.09945311191749e-05,
+          "ci95": 0.00013134422240957457,
+          "n": 20,
+          "wins": 8,
+          "resolved": false
+        },
+        "risk_realised_error": {
+          "mean": -0.0002852080568669038,
+          "ci95": 0.0006281520556022098,
+          "n": 20,
+          "wins": 7,
+          "resolved": false
+        }
+      },
+      "gs-ndn": {
+        "isr": {
+          "mean": 0.010059266428905844,
+          "ci95": 0.003595725517662524,
+          "n": 20,
+          "wins": 19,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": -0.0170920143422035,
+          "ci95": 0.003899914816107084,
+          "n": 20,
+          "wins": 0,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": -0.004571373908003449,
+          "ci95": 0.0037037646304984542,
+          "n": 20,
+          "wins": 5,
+          "resolved": true
+        }
+      },
+      "rc-ndn": {
+        "isr": {
+          "mean": -0.01746378585633161,
+          "ci95": 0.010967920987881033,
+          "n": 20,
+          "wins": 5,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": -0.027716569154419203,
+          "ci95": 0.007348845274083259,
+          "n": 20,
+          "wins": 1,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": -0.007985316309691674,
+          "ci95": 0.004290601268713085,
+          "n": 20,
+          "wins": 4,
+          "resolved": true
+        }
+      },
+      "rc-ndn-aci": {
+        "isr": {
+          "mean": -0.01673785443894698,
+          "ci95": 0.010578685938241874,
+          "n": 20,
+          "wins": 5,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": -0.02605219508651997,
+          "ci95": 0.006720354060651686,
+          "n": 20,
+          "wins": 1,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": -0.008526605259081855,
+          "ci95": 0.004755256408571092,
+          "n": 20,
+          "wins": 6,
+          "resolved": true
+        }
+      }
+    },
+    "rc-ndn": {
+      "saf+es": {
+        "isr": {
+          "mean": 0.01744411296906324,
+          "ci95": 0.010959410161624472,
+          "n": 20,
+          "wins": 15,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": 0.027695574623300013,
+          "ci95": 0.007346416259073434,
+          "n": 20,
+          "wins": 19,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": 0.0077001082528247704,
+          "ci95": 0.004344796265558229,
+          "n": 20,
+          "wins": 16,
+          "resolved": true
+        }
+      },
+      "gs-ndn": {
+        "isr": {
+          "mean": 0.027523052285237454,
+          "ci95": 0.010050870786641882,
+          "n": 20,
+          "wins": 19,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": 0.010624554812215687,
+          "ci95": 0.006971382817683753,
+          "n": 20,
+          "wins": 13,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": 0.0034139424016882253,
+          "ci95": 0.002648610488622282,
+          "n": 20,
+          "wins": 11,
+          "resolved": true
+        }
+      },
+      "gs-ndn-no-verify": {
+        "isr": {
+          "mean": 0.01746378585633161,
+          "ci95": 0.010967920987881033,
+          "n": 20,
+          "wins": 15,
+          "resolved": true
+        },
+        "producer_refusal_rate": {
+          "mean": 0.027716569154419203,
+          "ci95": 0.007348845274083259,
+          "n": 20,
+          "wins": 19,
+          "resolved": true
+        },
+        "risk_realised_error": {
+          "mean": 0.007985316309691674,
+          "ci95": 0.004290601268713085,
+          "n": 20,
+          "wins": 16,
+          "resolved": true
+        }
+      },
+      "rc-ndn-aci": {
+        "isr": {
+          "mean": 0.0007259314173846288,
+          "ci95": 0.005463551346107813,
+          "n": 20,
+          "wins": 10,
+          "resolved": false
+        },
+        "producer_refusal_rate": {
+          "mean": 0.0016643740678992298,
+          "ci95": 0.0025194811153994075,
+          "n": 20,
+          "wins": 10,
+          "resolved": false
+        },
+        "risk_realised_error": {
+          "mean": -0.0005412889493901805,
+          "ci95": 0.0016009334991444475,
+          "n": 20,
+          "wins": 8,
+          "resolved": false
+        }
+      }
+    }
+  }
+}
