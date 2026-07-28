@@ -88,7 +88,15 @@ class SefQLearning(ForwardingStrategy):
         return chosen
 
     def _eligible_faces(self, router: "Router", entry) -> list[str]:
-        """Faces at least as close to the destination as the installed route."""
+        """Neighbours strictly closer to the producer than this router is.
+
+        Merely having a route to the prefix is not enough -- every router does,
+        so that test admits the neighbour we just came from and lets exploration
+        walk an Interest in circles until it times out. Comparing the installed
+        route costs, which carry hop distance to the producer, keeps every
+        candidate a step forward. This is the job SEF's Next-Hop-ID field does in
+        the paper: suppress transmissions that cannot make progress.
+        """
         network = router.network
         if network is None:
             return [entry.face]
@@ -97,10 +105,11 @@ class SefQLearning(ForwardingStrategy):
             if peer == entry.face:
                 continue
             neighbour = network.nodes.get(peer)
-            if neighbour is None:
+            peer_fib = getattr(neighbour, "fib", None)
+            if peer_fib is None:
                 continue
-            peer_entry = getattr(neighbour, "fib", None)
-            if peer_entry is not None and peer_entry.get(entry.prefix) is not None:
+            peer_entry = peer_fib.get(entry.prefix)
+            if peer_entry is not None and peer_entry.cost < entry.cost:
                 eligible.append(peer)
         return eligible
 

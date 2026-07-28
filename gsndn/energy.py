@@ -130,7 +130,14 @@ class EnergyLedger:
 
 
 def charge_network(network, ledger: EnergyLedger, elapsed_ms: float) -> EnergyLedger:
-    """Settle the energy budget for every router once a run has finished."""
+    """Settle the energy budget for every router once a run has finished.
+
+    ``elapsed_ms`` must be the same window for every strategy being compared --
+    the workload duration, not the simulator's final clock. Background work such
+    as gossip keeps scheduling events after the last Interest, so the horizon
+    differs between strategies, and charging idle draw against it would bill the
+    strategy that finished its foreground work sooner for the privilege.
+    """
     from .network import Router
 
     for node in network.nodes.values():

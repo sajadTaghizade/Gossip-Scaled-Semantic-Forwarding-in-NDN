@@ -1,0 +1,21 @@
+{
+  "encode_ms": 7.04539899993506,
+  "search_base_ms": 0.004060196941130783,
+  "search_per_entry_ms": 8.76796506570385e-06,
+  "es_lookup_ms": 0.00010000030670198612,
+  "signature_ms": 0.00755350015424483,
+  "tag_match_ms": 0.0001019998308038339,
+  "qtable_update_ms": 0.002,
+  "gossip_apply_ms_per_entry": 0.002,
+  "measured": {
+    "encode_ms": true,
+    "search_base_ms": true,
+    "search_per_entry_ms": true,
+    "es_lookup_ms": true,
+    "tag_match_ms": true,
+    "signature_ms": true,
+    "qtable_update_ms": false,
+    "gossip_apply_ms_per_entry": false
+  },
+  "machine": "x86_64 / python 3.11.15"
+}

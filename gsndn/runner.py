@@ -194,7 +194,9 @@ def run_once(
 
     metrics = summarise(collector)
     metrics.update(_router_metrics(topology.routers, sim.now))
-    ledger = charge_network(topology.network, EnergyLedger(EnergyModel()), sim.now)
+    ledger = charge_network(
+        topology.network, EnergyLedger(EnergyModel()), config.workload.duration_ms
+    )
     metrics.update(ledger.report(len(collector)))
 
     gossip_report = gossip.report() if gossip is not None else {}

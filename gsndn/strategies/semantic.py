@@ -273,12 +273,17 @@ class GsNdn(Saf):
         )
         # Cached straight away so repeats of this wording skip the encoder, but
         # flagged unconfirmed: it is not gossiped, and a Nack will remove it.
-        router.es.store(
-            EsEntry(
-                variant=interest.name, canonical=canonical, face=face, score=score,
-                confirmed=not self.verify, learned_at=router.sim.now, source="local",
-            )
+        entry = EsEntry(
+            variant=interest.name, canonical=canonical, face=face, score=score,
+            confirmed=not self.verify, learned_at=router.sim.now, source="local",
         )
+        router.es.store(entry)
+        if not self.verify and self.gossip and router.gossip_protocol is not None:
+            # Verification off: share the guess straight away, unproven. This is
+            # the ablation arm, and keeping it on the gossip path is the whole
+            # point of it -- otherwise switching verification off would switch
+            # sharing off too, and the two effects could not be told apart.
+            router.gossip_protocol.on_confirmed(router, entry)
         return Resolution(
             outcome=OUTCOME_SEMANTIC, canonical=canonical, face=face, score=score,
             cpu_ms=cpu_ms, tag=SemanticTag(canonical, score, router.id),

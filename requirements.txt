@@ -1,0 +1,15 @@
+# Simulation and analysis
+numpy>=1.24
+matplotlib>=3.7
+scikit-learn>=1.3        # HashingVectorizer, for the lexical control encoder
+
+# Encoder: MiniLM-L6 on CPU, no PyTorch needed
+onnxruntime>=1.16
+tokenizers>=0.15
+
+# Tests
+pytest>=7.4
+
+# Optional: cross-check the ONNX encoder against the original PyTorch stack,
+# or try MiniLM-L12 / MPNet. Not needed to reproduce any reported result.
+# sentence-transformers>=2.2

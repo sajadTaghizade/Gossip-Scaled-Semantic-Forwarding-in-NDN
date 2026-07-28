@@ -12,7 +12,7 @@ is a difference in policy rather than in bookkeeping.
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from .des import ServiceQueue, Simulator
@@ -221,41 +221,53 @@ class Router(Node):
         self.cpu.submit(lambda: (BASE_LOOKUP_MS, lambda: self._deliver_data(data, in_face)))
 
     def _deliver_data(self, data: Data, in_face: str) -> None:
-        entry = self.pit.satisfy(data.name)
-        if entry is None:
-            # Look for a PIT entry keyed on the client's original wording: the
-            # producer answers with its own canonical name, which is not the
-            # name a semantically-resolved Interest was registered under.
-            entry = self._satisfy_by_resolution(data.name)
-        if entry is None:
+        entries = []
+        direct = self.pit.satisfy(data.name)
+        if direct is not None:
+            entries.append(direct)
+        # Also every entry keyed on a client's own wording that this router
+        # resolved to the same prefix. Several wordings routinely resolve to one
+        # service, and upstream aggregates them into a single Interest, so one
+        # Data legitimately answers all of them. Satisfying only the first would
+        # leave the rest to time out -- a failure the model would have invented.
+        entries.extend(self._entries_resolving_to(data.name))
+        if not entries:
             return
 
-        if entry.pending_learn is not None and self.strategy is not None:
-            # The guess worked: Data came back. Only now is the mapping worth
-            # keeping, and only now is it worth telling anyone else about.
-            self.strategy.on_confirmed(self, entry.pending_learn, self.sim.now)
-
         self.cs.put(data.name, data)
-        for face_id in entry.in_faces:
-            self._send(data, face_id)
+        for entry in entries:
+            if entry.pending_learn is not None and self.strategy is not None:
+                # The guess worked: Data came back. Only now is the mapping
+                # worth keeping, and only now worth telling anyone else about.
+                self.strategy.on_confirmed(self, entry.pending_learn, self.sim.now)
+            # Stamp each copy with exactly the Interests its own entry folded.
+            outgoing = replace(data, satisfied_ids=tuple(entry.interest_ids))
+            for face_id in entry.in_faces:
+                self._send(outgoing, face_id)
 
-    def _satisfy_by_resolution(self, canonical: str):
-        for name, entry in list(self.pit._entries.items()):  # noqa: SLF001 - internal by design
-            if entry.resolved_prefix == canonical:
-                return self.pit.satisfy(name)
-        return None
+    def _entries_resolving_to(self, canonical: str) -> List:
+        """Every outstanding entry this router pointed at ``canonical``."""
+        matched = [
+            name for name, entry in self.pit._entries.items()  # noqa: SLF001 - internal by design
+            if entry.resolved_prefix == canonical
+        ]
+        return [e for e in (self.pit.satisfy(name) for name in matched) if e is not None]
 
     def on_nack(self, nack: Nack, in_face: str) -> None:
         self.bytes_rx += nack.wire_bytes
-        entry = self.pit.satisfy(nack.name) or self._satisfy_by_resolution(nack.name)
-        if entry is None:
-            return
-        if entry.pending_learn is not None and self.strategy is not None:
-            # The guess was wrong. Forget it rather than caching a route that
-            # demonstrably does not serve this name.
-            self.strategy.on_rejected(self, entry.pending_learn)
-        for face_id in entry.in_faces:
-            self._send(nack, face_id)
+        entries = []
+        direct = self.pit.satisfy(nack.name)
+        if direct is not None:
+            entries.append(direct)
+        entries.extend(self._entries_resolving_to(nack.name))
+        for entry in entries:
+            if entry.pending_learn is not None and self.strategy is not None:
+                # The guess was wrong. Forget it rather than serving a route
+                # that demonstrably does not carry this name.
+                self.strategy.on_rejected(self, entry.pending_learn)
+            outgoing = replace(nack, satisfied_ids=tuple(entry.interest_ids))
+            for face_id in entry.in_faces:
+                self._send(outgoing, face_id)
 
 
 class Producer(Node):
@@ -338,33 +350,32 @@ class Consumer(Node):
             self.network.deliver(self, face, interest, "")
 
     def on_data(self, data: Data, in_face: str) -> None:
-        for interest in self._take(data.interest_id, data.name):
+        for interest in self._take(data.interest_id, data.name, data.satisfied_ids):
             correct = interest.expected is not None and data.name == interest.expected
             outcome = "resolved" if correct else OUTCOME_MISDELIVERED
             if self.on_complete is not None:
                 self.on_complete(interest, outcome, self.sim.now - interest.created_at)
 
     def on_nack(self, nack: Nack, in_face: str) -> None:
-        for interest in self._take(nack.interest_id, nack.name):
+        for interest in self._take(nack.interest_id, nack.name, nack.satisfied_ids):
             if self.on_complete is not None:
                 self.on_complete(interest, OUTCOME_NACK, self.sim.now - interest.created_at)
 
-    def _take(self, interest_id: int, name: str) -> List[Interest]:
+    def _take(self, interest_id: int, name: str, ids: Sequence[int] = ()) -> List[Interest]:
         """Every outstanding Interest this reply answers.
 
         A router aggregates duplicate Interests into one PIT entry and returns a
         single Data, so one reply can settle several of this consumer's
-        outstanding requests. Matching only the id would leave the others to
-        time out, which would charge a strategy for latency that PIT
-        aggregation -- not the strategy -- caused.
+        requests -- but only the ones that entry folded together, which the
+        reply names explicitly. Falling back to matching on the name would let
+        an early Data settle a request issued later, reporting a latency that
+        request never experienced.
         """
         settled: List[Interest] = []
-        exact = self.pending.pop(interest_id, None)
-        if exact is not None:
-            settled.append(exact)
-        for pending_id, candidate in list(self.pending.items()):
-            if candidate.name == name or candidate.expected == name:
-                settled.append(self.pending.pop(pending_id))
+        for candidate_id in (interest_id, *ids):
+            interest = self.pending.pop(candidate_id, None)
+            if interest is not None:
+                settled.append(interest)
         return settled
 
     def expire(self, deadline_ms: float) -> List[Interest]:

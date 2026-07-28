@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 _interest_ids = itertools.count(1)
 
@@ -93,6 +93,14 @@ class Data:
     producer: str
     payload_bytes: int = DATA_PAYLOAD_BYTES
 
+    #: The Interests this copy satisfies, filled in per hop from the local PIT
+    #: entry. A router aggregates duplicates, so one Data legitimately answers
+    #: several requests -- but only the ones that were actually folded into that
+    #: entry. Matching on the name alone would let a Data settle a request that
+    #: was still waiting on a later one of its own, which inflates latency for
+    #: requests that never waited.
+    satisfied_ids: Tuple[int, ...] = ()
+
     @property
     def wire_bytes(self) -> int:
         return len(self.name.encode()) + DATA_OVERHEAD_BYTES + self.payload_bytes
@@ -106,6 +114,9 @@ class Nack:
     interest_id: int
     reason: str
     origin: str
+
+    #: Same role as on Data: the Interests this refusal answers.
+    satisfied_ids: Tuple[int, ...] = ()
 
     @property
     def wire_bytes(self) -> int:
