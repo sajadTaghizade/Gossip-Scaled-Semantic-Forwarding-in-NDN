@@ -14,17 +14,37 @@ satisfaction. When producers move, a mapping that was right becomes wrong
 without anybody's similarity score changing, and no amount of re-encoding
 detects that. Only feedback does.
 
-Three events, all of which a smart hospital sees routinely as equipment is
-wheeled between wards:
+Four events, all of which a smart hospital sees routinely as equipment is
+wheeled between wards and as services are reconfigured:
 
-``depart``    a producer stops answering; its routes must be withdrawn
-``arrive``    a producer returns, restoring routes
-``relocate``  a producer's services move to a different attachment point, so
-              the name is still served but by a different face
+``depart``        a producer stops answering; its routes must be withdrawn
+``arrive``        a producer returns, restoring routes
+``relocate``      a producer's services move to a different attachment point, so
+                  the name is still served but by a different face
+``schema_drift``  a producer narrows the set of wordings it will answer to,
+                  without moving and without any route changing
 
-Relocation is the interesting one. Departure is detectable by any timeout
-mechanism; relocation is silent, and a router with a cached mapping keeps
-forwarding to a face that no longer leads anywhere useful.
+Relocation was expected to be the interesting one, and measurement said
+otherwise. The reason is visible in :meth:`ChurnDriver._withdraw`: departure and
+relocation both pull the FIB route *and* invalidate every Embedding Store entry
+that pointed at it, uniformly, for every strategy. That is the consistency rule
+SAF specifies and it is correct -- but it means the stale mapping is destroyed by
+the route event itself, before any producer gets the chance to refuse it. The
+signal verification exists to catch is erased by the mechanism that reports the
+event, so no strategy can look different, and section 6 duly found that none did.
+
+``schema_drift`` is the case that experiment was missing. A producer keeps its
+routes, its attachment and its FIB entries, and simply stops recognising some of
+the wordings it used to answer. Nothing is withdrawn, nothing is invalidated, no
+timeout fires and no similarity score changes -- the encoder's view of the world
+is exactly what it was. The only observable is a producer's live refusal, which
+is precisely the channel verification and calibration are built on. If feedback
+never earns its cost here it does not earn it anywhere.
+
+What it should move is precision and realised error rather than satisfaction: a
+wording the producer has stopped answering cannot be satisfied by anybody, so no
+strategy recovers it. What separates them is whether they keep confidently
+delivering it to a producer that will refuse.
 """
 
 from __future__ import annotations
@@ -46,6 +66,17 @@ class ChurnConfig:
     relocate_share: float = 0.5
     #: How long a departed producer stays away, in seconds.
     outage_s: float = 5.0
+
+    #: Share of events that are schema drifts. Drawn before the
+    #: relocate/depart split, so ``drift_share=1.0`` gives a network whose
+    #: topology never changes and whose producers quietly narrow what they
+    #: answer to -- the arm that isolates feedback from route events.
+    drift_share: float = 0.0
+    #: Share of a service's declared alias terms dropped per drift event. The
+    #: canonical term is never dropped, so exact-match forwarding is untouched
+    #: and only semantically resolved wordings are affected.
+    drift_fraction: float = 0.5
+
     seed: int = 0
 
     @property
@@ -61,6 +92,8 @@ class ChurnStats:
     routes_withdrawn: int = 0
     routes_installed: int = 0
     mappings_invalidated: int = 0
+    schema_drifts: int = 0
+    aliases_dropped: int = 0
 
     def as_dict(self) -> Dict[str, float]:
         return {
@@ -70,6 +103,8 @@ class ChurnStats:
             "churn_routes_withdrawn": self.routes_withdrawn,
             "churn_routes_installed": self.routes_installed,
             "churn_mappings_invalidated": self.mappings_invalidated,
+            "churn_schema_drifts": self.schema_drifts,
+            "churn_aliases_dropped": self.aliases_dropped,
         }
 
 
@@ -116,7 +151,11 @@ class ChurnDriver:
         ]
         if producers:
             producer_id = self.rng.choice(producers)
-            if self.rng.random() < self.config.relocate_share:
+            roll = self.rng.random()
+            drift = self.config.drift_share
+            if roll < drift:
+                self._schema_drift(producer_id)
+            elif roll < drift + (1.0 - drift) * self.config.relocate_share:
                 self._relocate(producer_id)
             else:
                 self._depart(producer_id)
@@ -168,6 +207,50 @@ class ChurnDriver:
         self._withdraw(producer.names)
         self._install({producer_id: sorted(producer.names)})
 
+    def _schema_drift(self, producer_id: str) -> None:
+        """Narrow one service's declared aliases, changing nothing else.
+
+        The producer stays where it is, keeps every route and every FIB entry,
+        and keeps answering to its canonical term -- so exact-match forwarding is
+        untouched and nothing in the routing plane observes an event at all. What
+        changes is that some of the wordings it used to accept now come back
+        refused.
+
+        Deliberately nothing else happens here. No ``_withdraw``, no
+        ``es.invalidate_route``: the stale mapping stays in every router's
+        Embedding Store, still pointing at a real route to a live producer, and
+        the only way to find out it has gone bad is to send an Interest and be
+        told no. That is the whole design of this event.
+        """
+        from dataclasses import replace as _replace
+
+        producer = self.topology.network.nodes[producer_id]
+        policy = getattr(producer, "policy", None)
+        if policy is None:
+            return
+
+        candidates = [
+            canonical for canonical, schema in policy.schemas.items()
+            if len(schema.declared) > 1
+        ]
+        if not candidates:
+            return
+
+        canonical = self.rng.choice(sorted(candidates))
+        schema = policy.schemas[canonical]
+        keep_always = _canonical_term(canonical)
+        droppable = sorted(term for term in schema.declared if term != keep_always)
+        if not droppable:
+            return
+
+        n_drop = max(1, int(round(len(droppable) * self.config.drift_fraction)))
+        dropped = set(self.rng.sample(droppable, min(n_drop, len(droppable))))
+        policy.schemas[canonical] = _replace(
+            schema, declared=frozenset(schema.declared - dropped)
+        )
+        self.stats.schema_drifts += 1
+        self.stats.aliases_dropped += len(dropped)
+
     # -- route and cache maintenance -------------------------------------
 
     def _withdraw(self, names: Sequence[str]) -> None:
@@ -191,3 +274,14 @@ class ChurnDriver:
 
     def report(self) -> Dict[str, float]:
         return self.stats.as_dict()
+
+
+def _canonical_term(canonical: str) -> str:
+    """The metric component of a canonical name -- the one never dropped.
+
+    ``build_schemas`` seeds every declaration with this term, so keeping it is
+    what guarantees a drifting producer still serves its own exact name and the
+    event stays invisible to the routing plane.
+    """
+    components = canonical.strip("/").split("/")
+    return components[-2] if len(components) >= 2 else components[-1]

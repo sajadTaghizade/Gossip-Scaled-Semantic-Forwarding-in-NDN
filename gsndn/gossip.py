@@ -99,6 +99,7 @@ class GossipStats:
     evidence_sent: int = 0
     evidence_applied: int = 0
     evidence_dropped_encoder: int = 0
+    evidence_mixed_encoder: int = 0
     evidence_bytes: int = 0
 
     def as_dict(self) -> Dict[str, float]:
@@ -117,6 +118,7 @@ class GossipStats:
             "gossip_evidence_sent": self.evidence_sent,
             "gossip_evidence_applied": self.evidence_applied,
             "gossip_evidence_dropped_encoder": self.evidence_dropped_encoder,
+            "gossip_evidence_mixed_encoder": self.evidence_mixed_encoder,
             "gossip_evidence_bytes": self.evidence_bytes,
         }
 
@@ -310,6 +312,11 @@ class GossipProtocol:
         route that served a name serves it regardless of how anyone decided to
         ask -- which is the whole reason gossip here carries names and verdicts
         rather than vectors.
+
+        A strategy may set ``mix_across_encoders`` to switch the guard off. That
+        is not an option for a deployment; it exists so the experiment has a
+        naive baseline to measure the guard against, rather than asserting that
+        refusing to pool was necessary and never checking.
         """
         agent = self.agents.get(router.id)
         if agent is None:
@@ -317,6 +324,7 @@ class GossipProtocol:
         agent.evidence_seen += 1
 
         encoder = _encoder_id(router)
+        guard = not getattr(router.strategy, "mix_across_encoders", False)
         batch = EvidenceBatch(
             prefix=prefix, encoder=encoder,
             observations=(observation,), origin=router.id,
@@ -326,8 +334,10 @@ class GossipProtocol:
             if peer is None:
                 continue
             if _encoder_id(peer.router) != encoder:
-                self.stats.evidence_dropped_encoder += 1
-                continue
+                if guard:
+                    self.stats.evidence_dropped_encoder += 1
+                    continue
+                self.stats.evidence_mixed_encoder += 1
             self.stats.evidence_sent += 1
             self.stats.evidence_bytes += batch.wire_bytes
             self.stats.bytes_sent += batch.wire_bytes

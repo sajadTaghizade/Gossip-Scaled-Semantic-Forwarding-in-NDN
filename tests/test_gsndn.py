@@ -21,7 +21,15 @@ from gsndn.des import ServiceQueue, Simulator, Stopwatch  # noqa: E402
 from gsndn.embeddings import NameIndex, PrecomputedBackend  # noqa: E402
 from gsndn.metrics import CORRECT, MISDELIVERED, Collector, aggregate, summarise  # noqa: E402
 from gsndn.packets import Interest, OUTCOME_MISDELIVERED, OUTCOME_NACK  # noqa: E402
+from gsndn.churn import ChurnConfig, ChurnDriver  # noqa: E402
+from gsndn.risk import (  # noqa: E402
+    ACI_EPSILON_MAX,
+    ACI_EPSILON_MIN,
+    Observation,
+    RiskController,
+)
 from gsndn.runner import ScenarioConfig, run_once  # noqa: E402
+from gsndn.topology import AdmissionSpec, multi_edge  # noqa: E402
 from gsndn.simhash import SimHasher, hamming, hamming_array  # noqa: E402
 from gsndn.tables import EmbeddingStore, EsEntry, Fib, Pit  # noqa: E402
 from gsndn.workload import WorkloadConfig, generate  # noqa: E402
@@ -284,6 +292,141 @@ def test_consumers_get_overlapping_but_distinct_slices():
         per_consumer.setdefault(request.consumer, set()).add(request.expected)
     sets = [s - {None} for s in per_consumer.values()]
     assert len(set.union(*sets)) > max(len(s) for s in sets)
+
+
+# --- adaptive conformal inference -------------------------------------------
+
+
+def test_aci_tightens_the_budget_after_errors():
+    """A stream of wrong decisions must push the effective budget down."""
+    controller = RiskController(epsilon=0.2, adaptive=True, adapt_rate=0.05)
+    assert controller.epsilon_target == 0.2
+    for _ in range(3):
+        controller.adapt(1.0)
+    assert controller.epsilon < 0.2
+    # gamma * (target - 1) per step, exactly.
+    assert controller.epsilon == pytest.approx(0.2 + 3 * 0.05 * (0.2 - 1.0))
+
+
+def test_aci_loosens_the_budget_after_clean_decisions():
+    controller = RiskController(epsilon=0.05, adaptive=True, adapt_rate=0.1)
+    for _ in range(4):
+        controller.adapt(0.0)
+    assert controller.epsilon > 0.05
+    assert controller.epsilon == pytest.approx(0.05 + 4 * 0.1 * 0.05)
+
+
+def test_aci_settles_where_realised_error_matches_the_target():
+    """Feed the target rate back and the budget must stop moving."""
+    controller = RiskController(epsilon=0.1, adaptive=True, adapt_rate=0.1)
+    for _ in range(50):
+        controller.adapt(0.1)
+    assert controller.epsilon == pytest.approx(0.1)
+
+
+def test_aci_stays_inside_its_clip_range():
+    low = RiskController(epsilon=0.2, adaptive=True, adapt_rate=0.5)
+    for _ in range(100):
+        low.adapt(1.0)
+    assert low.epsilon == pytest.approx(ACI_EPSILON_MIN)
+
+    high = RiskController(epsilon=0.5, adaptive=True, adapt_rate=0.5)
+    for _ in range(100):
+        high.adapt(0.0)
+    assert high.epsilon == pytest.approx(ACI_EPSILON_MAX)
+
+
+def test_aci_raises_the_boundary_it_hands_out():
+    """The point of the update: a tighter budget must mean a stricter route.
+
+    Without this the arithmetic could be right and change nothing, because the
+    budget only matters through the boundary it produces.
+    """
+    def calibrated(**kwargs):
+        controller = RiskController(prior=0.5, confidence=0.9, **kwargs)
+        for i in range(60):
+            controller.observe(
+                "/svc", Observation(score=0.5 + 0.005 * (i % 40), correct=i % 5 != 0)
+            )
+        return controller
+
+    loose = calibrated(epsilon=0.4)
+    tight = calibrated(epsilon=0.05)
+    assert tight.boundary_for("/svc") > loose.boundary_for("/svc")
+
+
+def test_a_fixed_controller_never_moves_its_budget():
+    controller = RiskController(epsilon=0.2)
+    for i in range(40):
+        controller.observe("/svc", Observation(score=0.9, correct=i % 3 != 0))
+    assert controller.epsilon == 0.2
+    assert controller.adapt_steps == 0
+
+
+# --- schema drift -----------------------------------------------------------
+
+
+def test_schema_drift_shrinks_a_declaration_without_touching_routes():
+    """The whole point of the event: no route change, no invalidation."""
+    catalog = datasets.load("hospital")
+    sim = Simulator()
+    topology = multi_edge(
+        sim, catalog.canonical_names, n_edges=2, n_producers=2,
+        admission=AdmissionSpec(catalog=catalog, alias_coverage=1.0, seed=1),
+    )
+    driver = ChurnDriver(topology, sim, ChurnConfig(interval_s=1.0, drift_share=1.0))
+
+    producer_id = topology.producers[0]
+    policy = topology.network.nodes[producer_id].policy
+    before = {k: set(v.declared) for k, v in policy.schemas.items()}
+    fib_before = {r.id: len(r.fib) for r in topology.routers}
+
+    driver._schema_drift(producer_id)
+
+    after = {k: set(v.declared) for k, v in policy.schemas.items()}
+    shrunk = [k for k in before if after[k] < before[k]]
+    assert len(shrunk) == 1, "exactly one service should drift per event"
+    assert driver.stats.schema_drifts == 1
+    assert driver.stats.aliases_dropped == len(before[shrunk[0]] - after[shrunk[0]])
+
+    assert {r.id: len(r.fib) for r in topology.routers} == fib_before
+    assert driver.stats.routes_withdrawn == 0
+    assert driver.stats.mappings_invalidated == 0
+
+
+def test_a_drifted_producer_still_answers_its_own_name():
+    """Drift must be invisible to exact matching, or it is not silent."""
+    catalog = datasets.load("hospital")
+    sim = Simulator()
+    topology = multi_edge(
+        sim, catalog.canonical_names, n_edges=2, n_producers=2,
+        admission=AdmissionSpec(catalog=catalog, alias_coverage=1.0, seed=1),
+    )
+    driver = ChurnDriver(topology, sim, ChurnConfig(interval_s=1.0, drift_share=1.0))
+    producer_id = topology.producers[0]
+    policy = topology.network.nodes[producer_id].policy
+    for _ in range(20):
+        driver._schema_drift(producer_id)
+    for canonical, schema in policy.schemas.items():
+        assert schema.admits(canonical), canonical
+
+
+# --- cross-encoder evidence -------------------------------------------------
+
+
+@needs_bundle
+def test_evidence_does_not_cross_an_encoder_boundary_unless_told_to():
+    shared = dict(
+        n_edges=6, epsilon=0.2, alt_embedding_model="lexical-char35-512",
+        heterogeneous_share=0.5,
+        workload=WorkloadConfig(rate_per_s=120, duration_ms=8000, seed=11),
+    )
+    guarded = run_once(ScenarioConfig(strategy="rc-ndn", **shared)).metrics
+    naive = run_once(ScenarioConfig(strategy="rc-ndn-naive-mix", **shared)).metrics
+    assert guarded["gossip_evidence_dropped_encoder"] > 0
+    assert guarded["gossip_evidence_mixed_encoder"] == 0
+    assert naive["gossip_evidence_dropped_encoder"] == 0
+    assert naive["gossip_evidence_mixed_encoder"] > 0
 
 
 # --- end to end -------------------------------------------------------------
