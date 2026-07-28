@@ -1,0 +1,31 @@
+{
+  "domain": "hospital",
+  "backend": "onnx",
+  "model": "all-MiniLM-L6-v2-onnx",
+  "dim": 384,
+  "n_names": 700,
+  "bytes_per_entry": 1536,
+  "catalog_summary": {
+    "services": 50,
+    "producers": 30,
+    "interests": 700,
+    "exact": 50,
+    "variant": 300,
+    "distractor": 350
+  },
+  "cost": {
+    "encode_ms": 6.731236499945226,
+    "batch_ms": {
+      "1": 6.731236499945226,
+      "2": 8.866885000088587,
+      "4": 12.910576999956902,
+      "8": 22.157300000117175,
+      "16": 37.2364159998142,
+      "32": 69.74471100011215,
+      "64": 182.58615499985353
+    },
+    "model_load_ms": 205.86396699991383,
+    "resident_mb": 210.65234375,
+    "measured": true
+  }
+}
