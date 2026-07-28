@@ -30,12 +30,18 @@ single component out of five, and LSH does not have the resolution to separate
 them. Signatures are kept here for gossip digests — 32 bytes against a 1.5 KB
 embedding — and never for choosing a route.
 
-**Semantic knowledge should be shared, not re-derived.** SAF resolves names at
-one router and shares nothing, so every router that meets a wording pays for its
-own inference. Across 1 to 16 edge routers, SAF's encoder work grows 67% and
-SAF+ES's 60%, while GS-NDN's grows 11%. At 300 Interests/s through a single
-access router, SAF reaches 0.90 processor utilisation and a 192 ms tail latency;
-GS-NDN stays at 0.38 and 86 ms, with a median equal to the bare round-trip time.
+**A per-router cache stops paying as the network grows.** SAF's Embedding Store
+is highly effective at one router, where it sees the whole request stream. Split
+the same traffic across 16 edge routers and each cache sees a thinner slice of
+it, so the network runs 60% more inferences for no more traffic. Sharing what
+each router proves restores that: GS-NDN's cost rises 10% over the same range,
+and at 16 edge routers it needs 28% fewer inferences than SAF+ES and 54% fewer
+than SAF. Both effects replicate on two independent domains.
+
+Under load the two cached strategies are indistinguishable, and that result
+belongs to SAF rather than to us: at 300 Interests/s through a single access
+router SAF's tail latency reaches 172 ms while both cached strategies sit near
+82 ms. Caching fixes latency at one router; sharing fixes cost across many.
 
 Full numbers, including where the approach does *not* help, are in
 [`RESULTS.md`](RESULTS.md).
