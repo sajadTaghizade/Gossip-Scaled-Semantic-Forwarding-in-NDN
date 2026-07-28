@@ -182,14 +182,19 @@ def fig_scaling(data: dict, out: Path) -> None:
     domains = list(data)
     fig, axes = plt.subplots(1, len(domains), figsize=(4.2 * len(domains), 3.2), squeeze=False)
     for ax, domain in zip(axes[0], domains):
+        ticks = []
         for strategy, block in data[domain].items():
             xs, means, errors = _xy(block, "encoder_runs")
             series(ax, xs, means, errors, strategy)
+            ticks = xs
         ax.set_title(domain)
         ax.set_xlabel("edge routers")
+        ax.set_xticks(ticks)
+        ax.set_xticklabels([f"{int(t)}" for t in ticks])
+        ax.set_ylim(bottom=0)
         tidy(ax)
     axes[0][0].set_ylabel("encoder inferences per run")
-    axes[0][-1].legend(loc="upper left")
+    axes[0][-1].legend(loc="center right")
     fig.suptitle("Encoder cost grows with network size unless routers share what they learn",
                  fontsize=10.5, fontweight="bold", y=1.02)
     save(fig, out, "fig_scaling")
@@ -201,11 +206,15 @@ def fig_rate(data: dict, out: Path) -> None:
     domains = list(data)
     fig, axes = plt.subplots(1, len(domains), figsize=(4.2 * len(domains), 3.2), squeeze=False)
     for ax, domain in zip(axes[0], domains):
+        ticks = []
         for strategy, block in data[domain].items():
             xs, means, errors = _xy(block, "irt_p95_ms")
             series(ax, xs, means, errors, strategy)
+            ticks = xs
         ax.set_title(domain)
         ax.set_xlabel("offered load (Interests/s)")
+        ax.set_xticks(ticks)
+        ax.set_xticklabels([f"{int(t)}" for t in ticks], fontsize=7.5)
         tidy(ax)
     axes[0][0].set_ylabel("95th percentile resolution time (ms)")
     axes[0][-1].legend(loc="upper left")

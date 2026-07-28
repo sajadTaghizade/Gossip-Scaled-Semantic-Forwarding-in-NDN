@@ -211,11 +211,28 @@ transformer, and not a replacement for one.
 
 ## 9. Energy
 
-Semantic forwarding shifts the energy budget from radio to compute. On the
-hospital domain, eight edge routers, 30 s: radio energy is around 9.6 J for
-every strategy — the same Interests cross the same links — while compute energy
-rises from 3.3 J for Vanilla NDN to 213.7 J for SAF. GS-NDN's 95.8 J is 55%
-below SAF's and 21% below SAF+ES's, tracking the inference counts directly.
+Semantic forwarding shifts the energy budget from radio to compute. Eight edge
+routers, 30 s, idle draw charged over the same window for every strategy:
+
+**Hospital**
+
+| Strategy | Total | Radio | Compute | Compute share | ISR |
+|---|---:|---:|---:|---:|---:|
+| Vanilla NDN | 549.1 J | 6.27 J | 3.3 J | 0.6% | 0.598 |
+| SAF | 734.8 J | 9.57 J | 213.7 J | 29.1% | 0.933 |
+| SAF+ES | 654.4 J | 9.57 J | 120.9 J | 18.5% | 0.933 |
+| **GS-NDN** | **632.7 J** | 9.60 J | **95.8 J** | **15.1%** | **0.938** |
+
+Radio energy is essentially identical across the three semantic strategies —
+9.6 J — because the same Interests cross the same links. Everything that
+separates them is compute: GS-NDN spends 55% less than SAF and 21% less than
+SAF+ES, tracking the inference counts directly. City behaves the same way
+(78.0 J against 183.1 J and 99.4 J).
+
+The comparison worth drawing from this table is not that semantic forwarding is
+cheap. It is not: it costs 15–29% of the whole budget on a task where exact
+matching spends 0.6%. The question is what that buys — satisfaction from 0.60 to
+0.94 — and whether the bill can be reduced without giving that up.
 
 The comparison against SEF is on a different axis and should not be read as a
 ranking. SEF has no semantic layer: it resolves exactly what Vanilla NDN does

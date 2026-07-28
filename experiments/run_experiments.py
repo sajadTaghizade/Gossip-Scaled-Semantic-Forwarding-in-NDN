@@ -186,6 +186,14 @@ def exp_scaling(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def _thin(curve: List[tuple], points: int = 400) -> List[tuple]:
+    """Keep at most ``points`` evenly spaced samples of a convergence curve."""
+    if len(curve) <= points:
+        return curve
+    step = len(curve) / points
+    return [curve[int(i * step)] for i in range(points)] + [curve[-1]]
+
+
 def exp_convergence(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     """Fast-path share over time: learning alone against being taught."""
     out: Dict[str, object] = {}
@@ -195,7 +203,9 @@ def exp_convergence(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
             config = base_config(domain, strategy=strategy, n_edges=8, duration_ms=60_000.0)
             results = bench.run(config, seeds[:3])
             rows[strategy] = {
-                "curves": [r.curve(window=300) for r in results],
+                # One point per request would be a few hundred thousand numbers
+                # per arm, and the figure resamples onto a fixed grid anyway.
+                "curves": [_thin(r.curve(window=300)) for r in results],
                 "summary": aggregate([r.metrics for r in results]),
             }
         out[domain] = rows
