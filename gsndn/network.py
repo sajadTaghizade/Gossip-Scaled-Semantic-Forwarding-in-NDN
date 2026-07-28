@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field, replace
-from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from .des import ServiceQueue, Simulator
 from .packets import (
@@ -22,10 +22,14 @@ from .packets import (
     Nack,
     OUTCOME_MISDELIVERED,
     OUTCOME_NACK,
+    OUTCOME_TAGGED,
     OUTCOME_TIMEOUT,
     SemanticTag,
 )
 from .tables import ContentStore, EmbeddingStore, Fib, PendingMapping, Pit
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .admission import AdmissionPolicy
 
 #: Cost of the table lookups every Interest pays, regardless of strategy.
 #: A trie or TCAM lookup is tens of nanoseconds; at millisecond resolution this
@@ -182,6 +186,8 @@ class Router(Node):
             self._reject(interest, in_face, resolution.outcome)
             return
 
+        if interest.resolution is None or resolution.outcome != OUTCOME_TAGGED:
+            interest.resolution = resolution.outcome
         pit_entry.out_face = resolution.face
         pit_entry.resolved_prefix = resolution.canonical
         pit_entry.pending_learn = resolution.learn
@@ -267,7 +273,13 @@ class Router(Node):
 
 
 class Producer(Node):
-    """Serves the names it owns, and only those."""
+    """Serves the names it owns, and only those.
+
+    Admission is decided by :class:`gsndn.admission.AdmissionPolicy`, built from
+    the schemas this producer itself declares. It never consults the catalog's
+    ground truth, so the feedback the network learns from is local knowledge --
+    incomplete and occasionally wrong -- rather than an oracle.
+    """
 
     def __init__(
         self,
@@ -275,12 +287,15 @@ class Producer(Node):
         sim: Simulator,
         names: Sequence[str],
         service_ms: float = 1.0,
+        policy: Optional["AdmissionPolicy"] = None,
     ) -> None:
         super().__init__(node_id, sim)
         self.names: Set[str] = set(names)
         self.service_ms = service_ms
+        self.policy = policy
         self.served = 0
         self.refused = 0
+        self.available = True
 
     def on_interest(self, interest: Interest, in_face: str) -> None:
         """Serve the name, or refuse it.
@@ -290,39 +305,46 @@ class Producer(Node):
         semantically resolved Interest arrives under a *rewritten* name -- SAF
         prepends the resolved prefix and keeps the client's original wording --
         so the producer can also look at what the client actually asked for and
-        decide whether that request is one of its services at all.
+        decide whether that request is one of its services.
 
-        A producer is assumed able to recognise requests for the services it
-        offers; that is local knowledge about its own namespace, not knowledge
-        about the network.  The simulation stands in for that check with the
-        catalog's ground truth, which is the modelling assumption behind every
-        confirmation result reported here and is worth stating plainly: without
-        some such local check, a resolution that lands on the wrong producer is
-        indistinguishable from one that lands on the right one, and no amount of
-        feedback can separate them.
+        That second check runs against the schema this producer declared for
+        itself: the terms it answers to and the instance it is attached to. It
+        is deliberately fallible. A producer that declared only some of the ways
+        clients word its service will refuse requests that were meant for it,
+        and the network has to learn from that anyway.
         """
         target = interest.lookup_name
-        intended = interest.expected
-        serves_request = target in self.names and (intended is None or intended in self.names)
-        if serves_request and intended is not None:
+        if not self.available:
+            self._refuse(interest, in_face, "producer-unavailable")
+            return
+
+        if target not in self.names:
+            self._refuse(interest, in_face, OUTCOME_MISDELIVERED)
+            return
+
+        admitted = (
+            self.policy.admits(target, interest.name) if self.policy is not None else True
+        )
+        if admitted:
             self.served += 1
             data = Data(
                 name=target, interest_id=interest.id,
                 produced_at=self.sim.now + self.service_ms, producer=self.id,
             )
-            self.sim.schedule(
-                self.service_ms, self._reply, data, in_face
-            )
+            self.sim.schedule(self.service_ms, self._reply, data, in_face)
         else:
-            # A semantic match that picked the wrong producer ends here. In a
-            # real deployment this is exactly how a confident wrong answer is
-            # caught, and it is why confirmation is available for free.
-            self.refused += 1
-            nack = Nack(
-                name=target, interest_id=interest.id,
-                reason=OUTCOME_MISDELIVERED, origin=interest.origin,
-            )
-            self.sim.schedule(self.service_ms, self._reply, nack, in_face)
+            # A resolution this producer does not recognise ends here. In a real
+            # deployment this is how a confident wrong answer is caught -- and
+            # also, sometimes, how a correct one is wrongly rejected.
+            self._refuse(interest, in_face, OUTCOME_MISDELIVERED)
+
+    def _refuse(self, interest: Interest, in_face: str, reason: str) -> None:
+        self.refused += 1
+        nack = Nack(
+            name=interest.lookup_name, interest_id=interest.id,
+            reason=reason, origin=interest.origin,
+        )
+        self.sim.schedule(self.service_ms, self._reply, nack, in_face)
 
     def _reply(self, packet, face_id: str) -> None:
         face = self.faces.get(face_id)

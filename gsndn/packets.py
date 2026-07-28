@@ -63,6 +63,12 @@ class Interest:
     expected: Optional[str] = None
     kind: str = "exact"
 
+    #: How the router that forwarded this Interest decided to. Written by the
+    #: forwarding plane and read only by the harness, so that the realised error
+    #: rate can be measured over exactly the decisions an error budget governs
+    #: -- an exact FIB hit is not a semantic decision and must not dilute it.
+    resolution: Optional[str] = None
+
     @property
     def wire_bytes(self) -> int:
         size = len(self.name.encode()) + INTEREST_OVERHEAD_BYTES

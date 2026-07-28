@@ -24,7 +24,34 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from .costs import LinkProfile
 from .des import Simulator
+from .admission import AdmissionPolicy, build_schemas
 from .network import Consumer, Network, Producer, Router
+
+
+@dataclass
+class AdmissionSpec:
+    """How producers come to know what they answer to.
+
+    Held on the scenario rather than on each producer so one description covers
+    the whole network: the same schema completeness and the same rate of
+    misconfiguration everywhere, which is what makes a sweep over either of them
+    interpretable.
+    """
+
+    catalog: object
+    alias_coverage: float = 1.0
+    noise: float = 0.0
+    seed: int = 0
+
+    def policy_for(self, names: Sequence[str]) -> AdmissionPolicy:
+        return AdmissionPolicy(
+            schemas=build_schemas(
+                self.catalog, names,
+                alias_coverage=self.alias_coverage, seed=self.seed,
+            ),
+            noise=self.noise,
+            salt=f"admission-{self.seed}",
+        )
 
 
 @dataclass
@@ -66,13 +93,23 @@ def _build_producers(
     attach_to: Sequence[str],
     names: Sequence[str],
     profile: LinkProfile,
+    admission: Optional["AdmissionSpec"] = None,
 ) -> Tuple[List[str], Dict[str, List[str]]]:
-    """Attach one producer per attachment point and hand it a slice of names."""
+    """Attach one producer per attachment point and hand it a slice of names.
+
+    Each producer gets an admission policy covering only the services it
+    publishes, so its knowledge of what requests mean is bounded by what it
+    itself offers.
+    """
     producer_ids: List[str] = []
     ownership: Dict[str, List[str]] = {}
     for i, (router_id, slice_) in enumerate(zip(attach_to, _partition(names, len(attach_to)))):
         producer_id = f"producer-{i}"
-        network.add(Producer(producer_id, sim, slice_, service_ms=profile.producer_service_ms))
+        policy = admission.policy_for(slice_) if admission is not None else None
+        network.add(Producer(
+            producer_id, sim, slice_,
+            service_ms=profile.producer_service_ms, policy=policy,
+        ))
         network.connect(
             router_id, producer_id,
             profile.router_to_producer_ms, profile.bandwidth_mbps,
@@ -92,6 +129,7 @@ def single_edge(
     cs_capacity: int = 0,
     es_capacity: int = 1024,
     queue_capacity: Optional[int] = None,
+    admission: Optional[AdmissionSpec] = None,
 ) -> Topology:
     """SAF's setting: one access-edge router between clients and providers."""
     profile = profile or LinkProfile()
@@ -118,7 +156,7 @@ def single_edge(
         consumers.append(consumer_id)
 
     producer_ids, ownership = _build_producers(
-        network, sim, [gateway] * n_producers, names, profile
+        network, sim, [gateway] * n_producers, names, profile, admission
     )
     network.install_routes(ownership)
 
@@ -140,6 +178,7 @@ def multi_edge(
     es_capacity: int = 1024,
     queue_capacity: Optional[int] = None,
     core_ring: bool = True,
+    admission: Optional[AdmissionSpec] = None,
 ) -> Topology:
     """Several edge routers around a core: the topology the sharing claim needs.
 
@@ -183,7 +222,7 @@ def multi_edge(
             )
 
     producer_ids, ownership = _build_producers(
-        network, sim, [core] * n_producers, names, profile
+        network, sim, [core] * n_producers, names, profile, admission
     )
     network.install_routes(ownership)
 
@@ -203,6 +242,7 @@ def grid(
     cs_capacity: int = 0,
     es_capacity: int = 1024,
     queue_capacity: Optional[int] = None,
+    admission: Optional[AdmissionSpec] = None,
 ) -> Topology:
     """A ``side`` x ``side`` mesh, as in SEF's dense deployments.
 
@@ -246,7 +286,7 @@ def grid(
 
     corner = node_id(side - 1, side - 1)
     producer_ids, ownership = _build_producers(
-        network, sim, [corner] * n_producers, names, profile
+        network, sim, [corner] * n_producers, names, profile, admission
     )
     network.install_routes(ownership)
 

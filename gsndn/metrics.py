@@ -27,9 +27,19 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .datasets import DISTRACTOR
+from .datasets import DISTRACTOR, EXACT
 from .des import Stopwatch
-from .packets import OUTCOME_MISDELIVERED, OUTCOME_NACK, OUTCOME_TIMEOUT
+from .packets import (
+    OUTCOME_ES_HIT,
+    OUTCOME_GOSSIP_HIT,
+    OUTCOME_MISDELIVERED,
+    OUTCOME_NACK,
+    OUTCOME_SEMANTIC,
+    OUTCOME_TIMEOUT,
+)
+
+#: Resolutions that were a judgement call rather than an exact lookup.
+SEMANTIC_RESOLUTIONS = frozenset({OUTCOME_SEMANTIC, OUTCOME_ES_HIT, OUTCOME_GOSSIP_HIT})
 
 CORRECT = "correct"
 MISDELIVERED = "misdelivered"
@@ -48,6 +58,7 @@ class RequestRecord:
     latency_ms: float
     consumer: str
     at_ms: float
+    resolution: Optional[str] = None
 
 
 @dataclass
@@ -78,6 +89,7 @@ class Collector:
                 name=interest.name, kind=interest.kind, expected=interest.expected,
                 verdict=verdict, latency_ms=latency_ms,
                 consumer=interest.origin, at_ms=at_ms,
+                resolution=getattr(interest, "resolution", None),
             )
         )
         if verdict == CORRECT:
@@ -138,6 +150,19 @@ def summarise(collector: Collector) -> Dict[str, float]:
         "irt_p99_ms": latency.percentile(99),
         "irt_max_ms": latency.percentile(100),
     }
+
+    # The realised error rate over exactly the decisions an error budget
+    # governs. Everything resolved semantically -- freshly, from cache, or from
+    # a neighbour's mapping -- was a judgement call that could have been wrong;
+    # an exact FIB match never was, and including it would dilute the rate
+    # towards zero and make any budget look satisfied.
+    governed = [r for r in records if r.resolution in SEMANTIC_RESOLUTIONS]
+    governed_wrong = sum(1 for r in governed if r.verdict == MISDELIVERED)
+    metrics["risk_governed_decisions"] = len(governed)
+    metrics["risk_realised_error"] = _safe_div(governed_wrong, len(governed))
+    metrics["risk_coverage"] = _safe_div(
+        len(governed), sum(1 for r in records if r.kind != EXACT)
+    )
 
     by_kind: Dict[str, List[RequestRecord]] = defaultdict(list)
     for record in records:

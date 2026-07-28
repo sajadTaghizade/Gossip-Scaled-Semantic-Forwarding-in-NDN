@@ -45,6 +45,21 @@ class ScenarioConfig:
     cs_capacity: int = 0
     queue_capacity: Optional[int] = None
 
+    #: Share of a service's known wordings that its producer actually declares.
+    #: Below 1.0, producers refuse requests that were genuinely meant for them,
+    #: so the feedback the network learns from is incomplete.
+    alias_coverage: float = 1.0
+    #: Probability a producer's verdict is simply wrong, either way.
+    feedback_noise: float = 0.0
+
+    #: Share of semantic forwarding decisions allowed to be wrong. This is the
+    #: risk-controlled strategies' only tuning knob; ``threshold`` survives for
+    #: them only as the prior applied to routes with no evidence yet.
+    epsilon: float = 0.05
+    risk_confidence: float = 0.9
+    #: Share of budget-refused decisions forwarded anyway, to keep learning.
+    explore_rate: float = 0.05
+
     workload: WorkloadConfig = field(default_factory=WorkloadConfig)
     links: LinkProfile = field(default_factory=LinkProfile)
 
@@ -81,13 +96,21 @@ class RunResult:
         return convergence_curve(self.collector, window)
 
 
-def _build_topology(config: ScenarioConfig, sim: Simulator, names: Sequence[str]) -> topo.Topology:
+def _build_topology(
+    config: ScenarioConfig, sim: Simulator, names: Sequence[str], catalog
+) -> topo.Topology:
     shared = {
         "profile": config.links,
         "n_producers": config.n_producers,
         "cs_capacity": config.cs_capacity,
         "es_capacity": config.es_capacity,
         "queue_capacity": config.queue_capacity,
+        "admission": topo.AdmissionSpec(
+            catalog=catalog,
+            alias_coverage=config.alias_coverage,
+            noise=config.feedback_noise,
+            seed=config.seed,
+        ),
     }
     if config.topology == "multi_edge":
         return topo.multi_edge(
@@ -121,14 +144,18 @@ def run_once(
         costs.encode_ms = backend.cost.encode_ms
 
     sim = Simulator()
-    topology = _build_topology(config, sim, catalog.canonical_names)
+    topology = _build_topology(config, sim, catalog.canonical_names, catalog)
 
     # Every router that may run the encoder needs the FIB embeddings. Building
     # the index once and sharing it matches the deployment, where embeddings are
     # computed when a route is installed rather than per Interest.
     index = NameIndex(backend, catalog.canonical_names)
 
-    strategy = build_strategy(config.strategy, threshold=config.threshold, costs=costs, seed=config.seed)
+    strategy = build_strategy(
+        config.strategy, threshold=config.threshold, costs=costs, seed=config.seed,
+        epsilon=config.epsilon, confidence=config.risk_confidence,
+        explore_rate=config.explore_rate,
+    )
     gossip: Optional[GossipProtocol] = None
     if getattr(strategy, "gossip", False):
         gossip = GossipProtocol(

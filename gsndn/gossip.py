@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Set, Tuple
 
 from .des import Simulator
+from .risk import Observation
 from .tables import EsEntry
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -42,6 +43,8 @@ if TYPE_CHECKING:  # pragma: no cover
 
 #: Wire cost of one gossiped mapping: two names, a score and a version stamp.
 MAPPING_OVERHEAD_BYTES = 12
+#: One calibration observation: a prefix reference, a score and a verdict bit.
+EVIDENCE_BYTES = 10
 #: A digest exchange that finds nothing to do still costs two small packets.
 DIGEST_BYTES = 24
 
@@ -61,6 +64,28 @@ class Mapping:
         return len(self.variant) + len(self.canonical) + MAPPING_OVERHEAD_BYTES
 
 
+@dataclass(frozen=True)
+class EvidenceBatch:
+    """Calibration observations about one route, as they travel.
+
+    Note what is *not* here: an embedding. Evidence is a score and a verdict
+    against a named route, so it survives the trip between routers that ran
+    different encoders only in the sense that the route name is meaningful to
+    both -- the scores are not comparable across models, and
+    :meth:`GossipProtocol.on_evidence` refuses to send them where they would be
+    misread. Mappings are model-agnostic; scores are not.
+    """
+
+    prefix: str
+    encoder: str
+    observations: Tuple["Observation", ...]
+    origin: str
+
+    @property
+    def wire_bytes(self) -> int:
+        return len(self.prefix) + len(self.encoder) + EVIDENCE_BYTES * len(self.observations)
+
+
 @dataclass
 class GossipStats:
     rounds: int = 0
@@ -71,6 +96,10 @@ class GossipStats:
     conflicts_resolved: int = 0
     bytes_sent: int = 0
     rumours_pushed: int = 0
+    evidence_sent: int = 0
+    evidence_applied: int = 0
+    evidence_dropped_encoder: int = 0
+    evidence_bytes: int = 0
 
     def as_dict(self) -> Dict[str, float]:
         return {
@@ -85,7 +114,18 @@ class GossipStats:
             "gossip_bytes_per_applied": (
                 self.bytes_sent / self.mappings_applied if self.mappings_applied else 0.0
             ),
+            "gossip_evidence_sent": self.evidence_sent,
+            "gossip_evidence_applied": self.evidence_applied,
+            "gossip_evidence_dropped_encoder": self.evidence_dropped_encoder,
+            "gossip_evidence_bytes": self.evidence_bytes,
         }
+
+
+def _encoder_id(router: "Router") -> str:
+    """Which embedding space this router's scores live in."""
+    index = getattr(router, "name_index", None)
+    backend = getattr(index, "backend", None)
+    return getattr(backend, "id", "unknown")
 
 
 class GossipAgent:
@@ -96,6 +136,7 @@ class GossipAgent:
         self.known: Dict[str, Mapping] = {}
         self._version = version_seed
         self.received_from: Set[str] = set()
+        self.evidence_seen = 0
 
         #: Highest version already handed to each peer. Anti-entropy is supposed
         #: to send what the other side lacks; without this bookkeeping a router
@@ -258,6 +299,61 @@ class GossipProtocol:
             agent.mark_sent(peer_id, [mapping])
             delay = self._link_delay(router, peer_id)
             self.sim.schedule(delay, self._receive, peer, [mapping])
+
+    def on_evidence(self, router: "Router", prefix: str, observation: Observation) -> None:
+        """Offer one calibration observation to routers that can read it.
+
+        Evidence only travels to neighbours running the same encoder. A score of
+        0.62 from MiniLM and a score of 0.62 from a character n-gram model are
+        not the same measurement, and pooling them would produce a boundary that
+        is calibrated for neither. Mappings still cross that line freely -- a
+        route that served a name serves it regardless of how anyone decided to
+        ask -- which is the whole reason gossip here carries names and verdicts
+        rather than vectors.
+        """
+        agent = self.agents.get(router.id)
+        if agent is None:
+            return
+        agent.evidence_seen += 1
+
+        encoder = _encoder_id(router)
+        batch = EvidenceBatch(
+            prefix=prefix, encoder=encoder,
+            observations=(observation,), origin=router.id,
+        )
+        for peer_id in router.peers:
+            peer = self.agents.get(peer_id)
+            if peer is None:
+                continue
+            if _encoder_id(peer.router) != encoder:
+                self.stats.evidence_dropped_encoder += 1
+                continue
+            self.stats.evidence_sent += 1
+            self.stats.evidence_bytes += batch.wire_bytes
+            self.stats.bytes_sent += batch.wire_bytes
+            self.sim.schedule(
+                self._link_delay(router, peer_id), self._receive_evidence, peer, batch
+            )
+
+    def _receive_evidence(self, agent: "GossipAgent", batch: EvidenceBatch) -> None:
+        router = agent.router
+        strategy = router.strategy
+        controller = getattr(strategy, "controllers", {}).get(router.id) if strategy else None
+        if controller is None:
+            return
+        cost = self.apply_cost_ms * len(batch.observations)
+
+        def apply() -> None:
+            taken = controller.absorb(
+                batch.prefix,
+                [
+                    Observation(o.score, o.correct, o.at_ms, source=batch.origin)
+                    for o in batch.observations
+                ],
+            )
+            self.stats.evidence_applied += taken
+
+        router.cpu.submit(lambda: (cost, apply))
 
     def _round(self) -> None:
         if not self._running:
