@@ -1,14 +1,21 @@
-# Risk-Controlled Semantic Forwarding in NDN
+# Gossip-Scaled Semantic Forwarding in NDN
 
 When a client asks for `/hospital/temp-sensor/room-101` and the network only
 knows `/smart-hospital/building-a/floor-1/temperature/room-101`, exact-match
 forwarding drops the request. Embedding the name and matching it by cosine
 similarity fixes that — at the cost of running a transformer in the forwarding
-path, and of deciding how similar is similar enough.
+path.
 
-That second cost is the one nobody has paid properly. Existing work picks a
-similarity threshold by tuning it on one catalog. This work replaces the
-threshold with an error budget the network holds itself to.
+That cost does not disappear with per-router caching. SAF's Embedding Store
+caches a resolution where it was made; split the same traffic across more
+routers and each cache sees a thinner slice of it, so the network re-runs the
+encoder more as it grows, not less — a failure mode SAF's own conclusion names
+as future work. This work shares a resolution, once verified, over
+anti-entropy gossip, so the rest of the network does not re-derive what one
+router has already confirmed. On top of that shared substrate, it also asks
+whether the similarity threshold itself can be replaced by something that
+does not need retuning per catalog — an error budget the network holds itself
+to, narrower in what it can claim, and reported as such.
 
 **Authors:** Mohammad Mahdi Yari, Sajjad Taghizadeh · **Advisor:** Dr. Mohammadreza Shakournia
 
@@ -16,10 +23,21 @@ threshold with an error budget the network holds itself to.
 
 ## The argument
 
-**A tuned threshold does not transfer.** SAF selects 0.7 on its own catalog. On
-the two catalogs here that setting gives recall of 0.66 and 0.50, while the best
-operating points sit at 0.55 and 0.45 — different from SAF's and different from
-each other. A threshold is a property of the catalog it was tuned on.
+**Caching alone does not scale; sharing does.** SAF's Embedding Store caches a
+resolved name at the router that resolved it. Split the same traffic across
+more edge routers and each cache sees a thinner slice: encoder calls rise 60%
+from 1 to 16 edge routers even though total traffic is unchanged — the
+erosion SAF's own conclusion names as future work. Gossiping a verified
+resolution to every router, once, holds that growth to 10% over the same
+range. This is architectural, not tunable: it costs nothing that a similarity
+threshold or an error budget changes, because it is a property of how many
+times the encoder runs, not of where the cutoff is set.
+
+**A tuned threshold does not transfer, and this is the narrower problem
+tackled on top.** SAF selects 0.7 on its own catalog. On the two catalogs
+here that setting gives recall of 0.66 and 0.50, while the best operating
+points sit at 0.55 and 0.45 — different from SAF's and different from each
+other. A threshold is a property of the catalog it was tuned on.
 
 **One number cannot serve every route anyway.** Some services sit alone in
 embedding space and a loose score is safe; others have five near-identical
@@ -33,34 +51,54 @@ by-product of forwarding. Verified semantic caching for LLM prompts needs a
 judge model to obtain the same signal, which is expensive enough to be the thing
 you were avoiding.
 
-So: **the operator sets an error budget ε instead of a threshold**, each route
-learns its own decision boundary from observed outcomes, and routers pool their
-evidence by gossip because no single router sees enough of it alone.
+So, as a second contribution riding on the gossip-scaled forwarding path: **the
+operator can set an error budget ε instead of a threshold**, each route learns
+its own decision boundary from observed outcomes, and the same gossip channel
+that shares resolutions also pools the evidence that calibrates them.
 
 ## What comes out
 
-The budget holds. Measured out of sample, over exactly the decisions it governs:
+**Sharing is what keeps cost from growing with the network — the primary
+result.** Encoder inferences for the same workload, edge routers 1 → 16:
+
+| Edge routers | 1 | 2 | 4 | 8 | 16 | Growth |
+|---|---:|---:|---:|---:|---:|---:|
+| SAF (no cache) | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +3% |
+| SAF+ES (per-router cache) | 833 | 901 | 1,006 | 1,155 | 1,330 | **+60%** |
+| GS-NDN (gossiped) | 868 | 886 | 868 | 905 | 952 | **+10%** |
+
+SAF pays for every FIB miss, so there is nothing cached to erode and it barely
+grows. SAF+ES caches locally and thins as routers multiply. Sharing what one
+router has already resolved holds growth to a sixth of that. This claim is
+independent of ε or any threshold — it is measured at a single fixed operating
+point and holds regardless of it. See [`RESULTS.md`](RESULTS.md) §2.
+
+**The error budget holds, but the claim that it forwards more efficiently was
+tested and withdrawn.** Measured out of sample:
 
 | ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | realised error | 0.009 | 0.009 | 0.009 | 0.010 | 0.014 | 0.025 | 0.035 |
 | satisfaction | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | 0.959 | 0.967 |
 
-It is a trade, not a free win. At ε = 0.2 the risk-controlled plane errs at
-**half the rate** of a tuned-threshold GS-NDN — 0.014 against 0.027 — for two
-points less satisfaction, 0.919 against 0.940. What ε buys is the ability to
-move along that curve without retuning anything, and to know where on it you
-are. A single-seed run early in development showed it winning on both axes at
-once; twenty seeds did not reproduce that, and the claim was withdrawn.
+Put against a fixed threshold tuned on one domain and carried to the other,
+rc-ndn Pareto-dominates in none of fourteen comparisons; the transferred
+threshold dominates in four. What survives is narrower than efficiency — call
+it **zero-tuning**: rc-ndn held its budget in all fourteen tests, where the
+transferred threshold missed once, at the tightest budget (ε = 0.02, tuned on
+city, realising 0.032 on hospital), and rc-ndn needs no labelled sample of the
+domain it runs on to get there, because it calibrates from live producer
+feedback instead. An operator who does have a labelled target-domain catalog
+should tune a threshold on it and will do slightly better. See
+[`RESULTS.md`](RESULTS.md) §6.
 
-**It does not beat a threshold tuned on a labelled catalog, even someone else's.**
-Put the budget against a fixed threshold tuned on one domain and carried to the
-other, and rc-ndn Pareto-dominates in none of fourteen comparisons; the
-transferred threshold dominates in four. What it does is hold its budget where
-the transferred threshold missed one — at ε = 0.02, tuned on city, realising
-0.032 on hospital — and get there without a labelled sample of the domain it
-runs on. That is the claim, and it is narrower than efficiency. See
-[`RESULTS.md`](RESULTS.md) §4.
+**Under schema drift — a producer quietly narrowing what it answers to,
+without any route or cache event — the budget keeps most of the advantage
+that route churn otherwise erases.** Paired seed by seed against a
+non-verifying baseline: +0.0052 ± 0.0013 satisfaction on the hospital
+catalog, 20 of 20 seeds; +0.0101 ± 0.0036 on the city catalog, 19 of 20.
+Nothing in the routing plane observes a schema drift; feedback is the only
+signal that can. See [`RESULTS.md`](RESULTS.md) §8.
 
 **Risk control alone deadlocks.** A boundary set too high blocks exactly the
 decisions that would produce the evidence to lower it, so the system stops
@@ -84,17 +122,21 @@ Two further results, both in [`RESULTS.md`](RESULTS.md):
 **Not ours: edge tagging.** Attaching the resolved prefix to the Interest so
 later hops skip the encoder is SAF's mechanism.
 
-**Not ours: the shape of the idea.** Learning per-item boundaries against an
-error bound instead of a fixed threshold is what
+**Not ours: the shape of the risk-control idea.** Learning per-item boundaries
+against an error bound instead of a fixed threshold is what
 [vCache](https://arxiv.org/abs/2502.03771) does for LLM prompt caching, and
 pooling calibration across parties is
 [federated conformal prediction](https://arxiv.org/abs/2305.17564).
 
-**Ours:** that a forwarding plane generates its own calibration labels for free,
-that per-route budgets can therefore be held online without a coordinator, that
-doing so deadlocks without controlled exploration, and that mappings and scores
-have different portability — a route that served a name serves it however anyone
-asked, but a score means nothing outside the embedding space that produced it.
+**Ours:** that sharing a verified resolution by gossip, rather than caching it
+per router, is what keeps recognition cost from growing with the network —
+measured against the erosion SAF's own conclusion leaves open, not asserted;
+that the same verification signal lets a forwarding plane generate its own
+calibration labels for free; that per-route error budgets can therefore be
+held online without a coordinator, and that doing so deadlocks without
+controlled exploration; and that mappings and scores have different
+portability — a route that served a name serves it however anyone asked, but a
+score means nothing outside the embedding space that produced it.
 
 ## Layout
 
@@ -166,11 +208,16 @@ that condition is exactly what the attack removes. All three strategies degrade
 alike; what limits the damage is that a router's own confirmed mappings outrank
 anything it is told. Provenance and reputation are left as future work.
 
-*Churn hurts everything equally.* Producer mobility was expected to be where
-verification finally earns its cost. Over twenty seeds it is not: at one second
-between events every strategy lands within 0.02 of the others (0.368 to 0.385).
-Verification does not confer a measurable advantage even here, and this is
-reported rather than quietly dropped.
+*Relocation churn hurts everything equally; schema drift does not.* Producer
+mobility was expected to be where verification finally earns its cost. Over
+twenty seeds, departure and relocation are not: FIB withdrawal invalidates the
+stale mapping before any producer gets the chance to refuse it, so at one
+second between events every strategy lands within 0.02 of the others (0.368 to
+0.385). Schema drift removes that confound — nothing is withdrawn, nothing is
+invalidated — and there verification's advantage reappears: +0.0052 to
++0.0101 satisfaction, paired and statistically significant. Both are reported,
+because which one an operator sees depends entirely on whether a given churn
+event happens to touch the routing plane.
 
 *Gossip loses when there is nobody to share with.* On a single edge router it is
 a net cost; the benefit appears from about four edge routers upward.

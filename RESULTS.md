@@ -16,6 +16,16 @@ seed-to-seed variation those intervals are made of is shared and cancels. That
 is said explicitly wherever it is done, and the unpaired means are printed
 alongside so nothing rests on the paired form alone.
 
+Two results carry this document, and they are not equally strong. §2–3 is
+architectural and holds regardless of any threshold or budget: sharing a
+verified resolution by gossip, instead of caching it per router, keeps
+recognition cost from growing with the network. §5–10 is narrower and reports
+a claim that was tested and partly withdrawn: replacing the similarity
+threshold with an online error budget does not forward more efficiently than
+a threshold tuned on a labelled target domain (§6), but it needs no such
+catalog to tune and keeps most of verification's advantage under a churn
+event a threshold-only design cannot even see (§8).
+
 ---
 
 ## 1. What the forwarding path costs
@@ -33,7 +43,40 @@ cannot become one at any FIB size a router would hold. Approximate
 nearest-neighbour indexes and hash-based lookup optimise the 0.0019 ms. The only
 quantity worth attacking is how often the 7.05 ms is paid.
 
-## 2. Signatures cannot select routes
+## 2. Where the cost goes as the network grows
+
+Encoder inferences per run as edge routers increase:
+
+| Edge routers | 1 | 2 | 4 | 8 | 16 | Growth |
+|---|---:|---:|---:|---:|---:|---:|
+| SAF | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +3% |
+| SAF+ES | 833 | 901 | 1,006 | 1,155 | 1,330 | **+60%** |
+| GS-NDN | 868 | 886 | 868 | 905 | 952 | **+10%** |
+
+SAF caches nothing, so it pays one inference per FIB miss wherever the miss
+happens. SAF+ES caches per router: as traffic splits across more routers each
+cache sees a thinner slice, and the same total traffic produces 60% more
+inferences — **the Embedding Store's benefit erodes as the network grows**,
+which is the setting SAF's conclusion names as future work. Sharing restores it.
+
+## 3. Latency under load
+
+95th-percentile resolution time on SAF's single-router topology:
+
+| Interests/s | 30 | 100 | 200 | 300 |
+|---|---:|---:|---:|---:|
+| SAF | 79.1 | 84.6 | 98.3 | **172.2** |
+| SAF+ES | 77.9 | 77.9 | 79.7 | **82.2** |
+| GS-NDN | 77.9 | 77.9 | 80.1 | **82.8** |
+
+SAF reaches 0.90 processor utilisation at 300 Interests/s and its tail more than
+doubles — the bottleneck the paper reports past roughly 210 Interests/s,
+reproduced. **This result belongs to the Embedding Store, not to us**: on one
+router there is nobody to gossip with, and the two cached strategies are
+indistinguishable. Caching fixes latency at one router; sharing fixes cost
+across many.
+
+## 4. Signatures cannot select routes
 
 Nearest FIB entry by Hamming distance over random projections, against the true
 cosine argmax on 300 reworded hospital names:
@@ -51,7 +94,7 @@ have the resolution to separate them. This is why the Interest tag carries the
 resolved prefix as a string. Signatures are kept only for anti-entropy digests,
 where 32 bytes against a 1.5 KB embedding is the point.
 
-## 3. The threshold problem
+## 5. The threshold problem
 
 Precision, recall and F1 against the cosine threshold:
 
@@ -68,7 +111,12 @@ that even a permissive cutoff rejects them. Best F1 is near 0.45–0.50 on city
 and 0.55–0.60 on hospital: **different from SAF's, and different from each
 other.**
 
-## 4. An error budget instead of a threshold
+## 6. An error budget instead of a threshold
+
+This section and the next four ask a narrower question than §2–3: whether the
+fixed similarity threshold — the second cost identified above — can be
+replaced by something that does not need retuning per catalog. Nothing here
+changes how the forwarding path scales; that was already settled by gossip.
 
 The operator sets ε, the share of semantic forwarding decisions that may turn
 out wrong. Each route learns its own boundary from observed outcomes,
@@ -109,7 +157,7 @@ number could not have served every route.
 The comparison above is not the one a sceptic would ask for. A fixed threshold
 traces its own frontier: sweep it and every point is a (realised error,
 satisfaction) pair, so an operator who can measure realised error on their own
-catalog can simply pick the point they want. Section 3's flat precision curve
+catalog can simply pick the point they want. Section 5's flat precision curve
 does not answer that; it only says where the best F1 sits.
 
 What the budget can claim over such an operator is narrower, and it is about
@@ -148,7 +196,7 @@ budgets in each direction -- rc-ndn Pareto-dominates in **none**. The
 transferred threshold dominates in four, all at ε ≥ 0.2 on the hospital-tuned
 side where 0.45 reaches 0.983 satisfaction inside budget and rc-ndn's best is
 0.979. The other ten are trades: less error for less satisfaction, which is the
-same trade section 4 already reports.
+same trade section 6 already reports.
 
 Two things survive, and they are worth less than the withdrawn claim.
 
@@ -169,10 +217,10 @@ the domain you are about to run on. That is the assumption the transfer
 experiment removes, and removing it is the whole point: rc-ndn gets its labels
 from producer feedback at run time, on the domain it is actually deployed in.
 The defensible statement is therefore **not** that the budget forwards more
-efficiently, but that it is *tunable without access to the test domain* and
-reports where on the curve it ended up. On these two catalogs an operator who
-does have a labelled sample of the target domain should tune a threshold on it
-and will do slightly better.
+efficiently, but that it is *tunable without access to the test domain* --
+call this the zero-tuning property -- and reports where on the curve it ended
+up. On these two catalogs an operator who does have a labelled sample of the
+target domain should tune a threshold on it and will do slightly better.
 
 ### Why a flat per-route estimator does not work
 
@@ -184,7 +232,7 @@ gives one well-supported boundary that each route then shrinks away from at a
 rate set by its own evidence. This is not a refinement; without it the mechanism
 does not function.
 
-## 5. Risk control deadlocks without exploration
+## 7. Risk control deadlocks without exploration
 
 A boundary set too high blocks exactly the decisions that would have produced
 the evidence to lower it. The system stops forwarding, stops learning, and stays
@@ -214,7 +262,7 @@ router sees enough of its own traffic to fit per-route boundaries; this is what
 gossip is for in this design, and it is a stronger reason than the encoder
 savings that motivated the earlier version.
 
-## 6. Producer churn
+## 8. Producer churn
 
 Producers depart, return and relocate. Relocation looks like the hard case: the
 name stays available, nothing times out, and no similarity score changes — a
@@ -300,7 +348,9 @@ refuse; city gives +0.0101 ± 0.0036 on nineteen of twenty and 14% fewer. So
 drift keeps about two thirds of the static advantage under a churn rate that
 otherwise destroys it, and the claim this experiment can support is that
 **feedback survives an event nothing else can see** — not that churn is where
-verification finally becomes large. It does not become large anywhere.
+verification finally becomes large. It does not become large anywhere. This is
+the second leg of the zero-tuning contribution in §6: a threshold-only design
+has no live signal to detect drift with at all, verified or not.
 
 SAF+ES lands on top of GS-NDN-without-verification to four decimal places, which
 is the sanity check the arm needed: both cache on resolution and neither
@@ -308,7 +358,7 @@ retracts, so under this event they are the same system, and they measure as it.
 
 The risk controller trades in the other direction, and hard: 36% fewer refused
 Interests than SAF+ES at one second (0.066 against 0.103) for two and a half
-points of satisfaction. That is the same trade section 4 reports, and drift
+points of satisfaction. That is the same trade section 6 reports, and drift
 sharpens it rather than changing it. City behaves the same way — verification
 +0.0101 ± 0.0036 satisfaction on 19 of 20 seeds, refusals 0.101 against 0.118.
 
@@ -321,7 +371,7 @@ principled fix, and `rc-ndn-aci` implements it — the budget itself moves,
 ε<sub>t+1</sub> = ε<sub>t</sub> + γ(ε<sub>target</sub> − err<sub>t</sub>), where
 err<sub>t</sub> is the miscoverage indicator of the decision just judged. Only
 decisions the boundary actually covered drive it; exploratory forwards below the
-boundary are decisions the budget did not cover (section 5) and feeding them in
+boundary are decisions the budget did not cover (section 7) and feeding them in
 would have the controller punish itself for gathering evidence.
 
 **The mechanism does what it says.** Effective ε with a target of 0.2, hospital:
@@ -356,7 +406,7 @@ interesting finding.** Route withdrawals destroy the mappings before they can be
 refuted (above), so the decisions that survive to be judged are mostly correct,
 and the update rule reads a clean stretch and loosens. At one second between
 relocations the effective budget has climbed to 0.364 on hospital and 0.501 on
-city, the latter past the top of the range section 4 sweeps at all. Realised error
+city, the latter past the top of the range section 6 sweeps at all. Realised error
 rises with it, 0.017 → 0.027 on hospital, and stays far inside 0.2 only because
 this catalog cannot produce much error at any setting. **The number the operator
 set has stopped being the number in force**, and nothing in the mechanism
@@ -364,7 +414,7 @@ reports that. ACI's guarantee is asymptotic coverage, not a per-run bound, and
 this is what that distinction costs on a network reorganising itself every
 second. Clipping the range is a floor and a ceiling, not a fix.
 
-## 7. Compromised routers
+## 9. Compromised routers
 
 Two things travel over gossip and each is poisoned differently. A **false
 mapping** sends Interests to the wrong producer and is exposed by that
@@ -392,7 +442,7 @@ is adversarial: it is a guarantee conditional on honest reporting, and this
 table is the measurement of what that condition is worth. Provenance and
 reputation are the obvious next step and are not implemented.
 
-## 8. Encoder heterogeneity
+## 10. Encoder heterogeneity
 
 Routers running different encoders in one network — MiniLM-L6 alongside the
 character n-gram control. Mappings pool across the boundary because a route that
@@ -445,7 +495,7 @@ city; realised error differs by 0.0013 at 50% hospital with confidence intervals
 of ±0.005 on both. **The naive baseline does not degrade worse, and the
 expectation that it would is not borne out.** The guard prevents a
 mis-calibration that these two catalogs are too forgiving to punish — every
-threshold on either domain realises under 0.035 error (section 4), so a boundary
+threshold on either domain realises under 0.035 error (section 6), so a boundary
 displaced by 0.06 still lands somewhere safe. On a catalog where the boundary
 had to be precise the corruption would presumably cost something; that is a
 conjecture, and it is not what was measured here.
@@ -454,39 +504,6 @@ The guard stays, because a mechanism that is right for a stated reason and free
 in practice is worth keeping, and because a deployment cannot know in advance
 that its catalog is one of the forgiving ones. But the earlier phrasing invited
 a reader to think refusing to pool had been shown to matter, and it has not.
-
-## 9. Where the cost goes as the network grows
-
-Encoder inferences per run as edge routers increase:
-
-| Edge routers | 1 | 2 | 4 | 8 | 16 | Growth |
-|---|---:|---:|---:|---:|---:|---:|
-| SAF | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +3% |
-| SAF+ES | 833 | 901 | 1,006 | 1,155 | 1,330 | **+60%** |
-| GS-NDN | 868 | 886 | 868 | 905 | 952 | **+10%** |
-
-SAF caches nothing, so it pays one inference per FIB miss wherever the miss
-happens. SAF+ES caches per router: as traffic splits across more routers each
-cache sees a thinner slice, and the same total traffic produces 60% more
-inferences — **the Embedding Store's benefit erodes as the network grows**,
-which is the setting SAF's conclusion names as future work. Sharing restores it.
-
-## 10. Latency under load
-
-95th-percentile resolution time on SAF's single-router topology:
-
-| Interests/s | 30 | 100 | 200 | 300 |
-|---|---:|---:|---:|---:|
-| SAF | 79.1 | 84.6 | 98.3 | **172.2** |
-| SAF+ES | 77.9 | 77.9 | 79.7 | **82.2** |
-| GS-NDN | 77.9 | 77.9 | 80.1 | **82.8** |
-
-SAF reaches 0.90 processor utilisation at 300 Interests/s and its tail more than
-doubles — the bottleneck the paper reports past roughly 210 Interests/s,
-reproduced. **This result belongs to the Embedding Store, not to us**: on one
-router there is nobody to gossip with, and the two cached strategies are
-indistinguishable. Caching fixes latency at one router; sharing fixes cost
-across many.
 
 ## 11. Does a transformer earn its cost?
 
@@ -548,12 +565,12 @@ both setups define identically. See [`ndnsim/`](ndnsim/).
   refuses 29% of requests meant for it, and satisfaction falls 0.936 → 0.879 as
   coverage drops to 0.5. What is not modelled is a producer whose schema is
   adversarially wrong.
-- **The budget is conditional on honest reporting.** Section 7 measures what
+- **The budget is conditional on honest reporting.** Section 9 measures what
   that condition is worth; it does not remove it.
 - **Exchangeability.** Conformal-style bounds assume the calibration and test
   distributions match. Zipf popularity and producer churn both violate this. The
   hierarchical estimator and the bounded observation window mitigate it. The
-  adaptive variant is now implemented and measured (section 6): it moves the
+  adaptive variant is now implemented and measured (section 8): it moves the
   budget in the right direction under schema drift, gives an edge on one domain
   of two, and under relocation churn drifts the effective budget to 0.36–0.50
   against a target of 0.2. It replaces a per-run bound with asymptotic coverage,
@@ -566,7 +583,7 @@ both setups define identically. See [`ndnsim/`](ndnsim/).
 - **One transformer.** SAF compares MiniLM-L6, MiniLM-L12 and MPNet and finds
   recognition quality nearly identical; only L6 is used here, alongside the
   lexical control.
-- **Source weighting against poisoned evidence is not implemented.** Section 7
+- **Source weighting against poisoned evidence is not implemented.** Section 9
   shows a compromised router's fabricated observations moving a victim's
   boundary, and names provenance and reputation as the obvious next step. A
   k-source quorum -- accept a boundary shift only when independent routers
