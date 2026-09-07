@@ -65,7 +65,7 @@ result.** Encoder inferences for the same workload, edge routers 1 → 16:
 |---|---:|---:|---:|---:|---:|---:|
 | SAF (no cache) | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +3% |
 | SAF+ES (per-router cache) | 833 | 901 | 1,006 | 1,155 | 1,330 | **+60%** |
-| GS-NDN (gossiped) | 868 | 886 | 868 | 905 | 952 | **+10%** |
+| GS-NDN (gossiped) | 875 | 893 | 877 | 914 | 959 | **+10%** |
 
 SAF pays for every FIB miss, so there is nothing cached to erode and it barely
 grows. SAF+ES caches locally and thins as routers multiply. Sharing what one
@@ -192,9 +192,10 @@ accounted for. See [`ndnsim/README.md`](ndnsim/README.md).
 *Producer feedback is modelled, not assumed.* Each producer declares the terms
 it answers to and the instance it serves, and decides on that alone — never on
 the catalog's ground truth. Declarations are deliberately incomplete: at
-`alias_coverage=0.7` a producer refuses 29% of requests genuinely meant for it,
-and satisfaction falls from 0.936 to 0.879 as coverage drops to 0.5. The
-feedback channel is informative, not correct.
+`alias_coverage=0.7` a producer leaves 29% of the wordings it can be asked by
+undeclared, and GS-NDN's satisfaction falls from 0.940 to 0.826 (city: 0.956 to
+0.776) as coverage drops to 0.5. The feedback channel is informative, not
+correct. See [`RESULTS.md`](RESULTS.md) §15.
 
 *Exploration is a real cost.* The 5% of refused decisions spent on evidence are
 decisions the budget explicitly did not cover, and they are counted separately
@@ -202,8 +203,9 @@ rather than folded into the reported rate.
 
 *Poisoning degrades gracefully; it is not prevented, and risk control does not
 help.* Against a persistent attacker re-injecting every gossip round,
-satisfaction falls from 0.940 to 0.747 at 50% compromise and the realised error
-rises to 0.17 — the budget is a guarantee conditional on honest reporting, and
+GS-NDN's satisfaction falls from 0.940 to 0.747 at 50% compromise and its
+realised error rises from 0.027 to 0.165 (risk-controlled: 0.919 to 0.754, and
+0.014 to 0.170) — the budget is a guarantee conditional on honest reporting, and
 that condition is exactly what the attack removes. All three strategies degrade
 alike; what limits the damage is that a router's own confirmed mappings outrank
 anything it is told. Provenance and reputation are left as future work.

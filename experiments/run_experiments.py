@@ -844,7 +844,77 @@ def exp_ontology(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_coverage(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """What an incomplete producer declaration costs.
+
+    The feedback channel this work calibrates against is a producer deciding
+    from its own declared schema, and that declaration is allowed to be
+    incomplete: ``alias_coverage`` is the share of a service's known wordings
+    its operator bothered to declare. Below 1.0 a producer refuses requests
+    that were genuinely meant for it, so the labels the risk controller learns
+    from are not merely noisy but biased against the routes that are hardest
+    to word.
+
+    Two numbers per setting. ``undeclared_share`` is a property of the
+    declarations alone -- what fraction of the wordings a service can be asked
+    by it did not declare -- read straight off the schemas without running
+    anything. The rest is end to end, including a strategy that never consults
+    feedback (``saf+es``), because the cost of a narrow declaration is a
+    producer-side effect and should appear whether or not a strategy learns
+    from it.
+    """
+    from gsndn import datasets as _datasets
+    from gsndn.admission import build_schemas, _metric_term
+
+    coverages = (1.0, 0.9, 0.7, 0.5)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        catalog = bench.catalogs[domain]
+        rows: Dict[str, object] = {}
+        for coverage in coverages:
+            # What the declarations themselves leave out, before any traffic.
+            wordings: Dict[str, set] = {}
+            for interest in catalog.by_kind(_datasets.VARIANT):
+                if interest.expected:
+                    wordings.setdefault(interest.expected, set()).add(interest.name)
+            declared_n = askable_n = 0
+            for seed in seeds:
+                schemas = build_schemas(
+                    catalog, sorted(wordings), alias_coverage=coverage, seed=seed,
+                )
+                for canonical, schema in schemas.items():
+                    terms = {
+                        _metric_term(w, schema.instance)
+                        for w in wordings.get(canonical, ())
+                    }
+                    terms = {t for t in terms if t is not None}
+                    askable_n += len(terms)
+                    declared_n += len(terms & set(schema.declared))
+            undeclared = 1.0 - (declared_n / askable_n if askable_n else 1.0)
+
+            per_strategy = {}
+            for strategy in ("saf+es", "gs-ndn", "rc-ndn"):
+                config = base_config(
+                    domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                    alias_coverage=coverage,
+                )
+                per_strategy[strategy] = aggregate(bench.metrics(config, seeds))
+            rows[str(coverage)] = {
+                "undeclared_share": undeclared,
+                "strategies": per_strategy,
+            }
+        out[domain] = rows
+        print(f"\n--- {domain}: declared alias coverage ---")
+        for coverage, cell in rows.items():
+            print(f"  coverage {coverage}  undeclared {cell['undeclared_share']:.3f}")
+            for strategy, m in cell["strategies"].items():
+                print(f"      {strategy:<10} ISR {m['isr']['mean']:.3f}"
+                      f"  refusal {m['producer_refusal_rate']['mean']:.3f}")
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
+    "coverage": exp_coverage,
     "risk": exp_risk,
     "churn": exp_churn,
     "drift_paired": exp_drift_paired,

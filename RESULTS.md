@@ -51,7 +51,7 @@ Encoder inferences per run as edge routers increase:
 |---|---:|---:|---:|---:|---:|---:|
 | SAF | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +3% |
 | SAF+ES | 833 | 901 | 1,006 | 1,155 | 1,330 | **+60%** |
-| GS-NDN | 868 | 886 | 868 | 905 | 952 | **+10%** |
+| GS-NDN | 875 | 893 | 877 | 914 | 959 | **+10%** |
 
 SAF caches nothing, so it pays one inference per FIB miss wherever the miss
 happens. SAF+ES caches per router: as traffic splits across more routers each
@@ -561,10 +561,10 @@ both setups define identically. See [`ndnsim/`](ndnsim/).
 
 - **Feedback is modelled, not assumed — but it is still a model.** Producers
   decide from schemas they declare, never from the catalog oracle, and those
-  declarations are deliberately incomplete: at `alias_coverage=0.7` a producer
-  refuses 29% of requests meant for it, and satisfaction falls 0.936 → 0.879 as
-  coverage drops to 0.5. What is not modelled is a producer whose schema is
-  adversarially wrong.
+  declarations are deliberately incomplete: measured in section 15, at
+  `alias_coverage=0.7` a producer leaves 29% of the wordings it can be asked by
+  undeclared, and satisfaction falls 0.940 → 0.826 as coverage drops to 0.5.
+  What is not modelled is a producer whose schema is adversarially wrong.
 - **The budget is conditional on honest reporting.** Section 9 measures what
   that condition is worth; it does not remove it.
 - **Exchangeability.** Conformal-style bounds assume the calibration and test
@@ -640,3 +640,50 @@ client actually phrases a request — word order, abbreviation, local convention
 whatever the integrator typed at three in the morning — because no published
 ontology describes that and no public NDN trace exists to supply it. The
 phrasing axis is exactly as invented as it was.
+
+## 15. What an incomplete producer declaration costs
+
+The feedback channel every verified strategy calibrates against is a producer
+deciding from the schema it declared for itself. That declaration is allowed to
+be incomplete, and section 14 leans on how incomplete. This section measures it
+rather than asserting it. Twenty seeds, eight edge routers, ε = 0.2.
+
+`undeclared` is a property of the declarations alone — the share of the wordings
+a service can be asked by that it did not declare — read off the schemas without
+running any traffic. It tracks 1 − coverage closely, which is what the stable-hash
+draw in `admission.build_schemas` should produce, and is the check that the knob
+does what its name says.
+
+| coverage | undeclared | SAF+ES | GS-NDN | RC-NDN |
+|---|---:|---:|---:|---:|
+| 1.0 | 0.000 | 0.932 | **0.940** | 0.919 |
+| 0.9 | 0.100 | 0.911 | **0.917** | 0.864 |
+| 0.7 | 0.292 | 0.871 | **0.874** | 0.801 |
+| 0.5 | 0.505 | 0.827 | 0.826 | 0.762 |
+
+City, same protocol: undeclared 0.000 / 0.103 / 0.301 / 0.510; GS-NDN 0.956 →
+0.917 → 0.849 → 0.776.
+
+**The cost is producer-side, and it lands on everyone.** SAF+ES never consults
+feedback at all and loses almost exactly what GS-NDN loses (0.932 → 0.827 against
+0.940 → 0.826), which is the sign that this is a producer refusing requests, not
+a strategy mislearning from them. Verification's margin over the cache narrows as
+coverage drops — +0.008 at full coverage, −0.001 at 0.5 — because what
+verification exploits is a producer's "no" being *informative*, and a producer
+that has declared half its vocabulary says "no" to correct routes too.
+
+**Risk control pays the most for it, and the mechanism is visible in the refusal
+rate.** RC-NDN falls furthest (0.919 → 0.762 on hospital, 0.956 → 0.710 on city)
+while its producer refusal rate stays *lowest* of the three (0.051 against 0.162
+and 0.150 at coverage 0.5). It is not being refused more; it is forwarding less.
+False refusals enter the calibration windows as genuine errors, the Wilson upper
+bound rises, every route's boundary tightens, and the controller declines
+decisions that would in fact have been served. This is the honest limit of
+calibrating from live feedback: **the guarantee is against the feedback channel,
+not against the ground truth, and a systematically incomplete declaration biases
+the two apart.** ε is still held — the realised error is computed against the
+same channel — but what the operator gets for it is worth less.
+
+Not modelled: a producer whose declaration is adversarially wrong rather than
+merely narrow. Section 9 is the closest thing, and it attacks the gossip channel
+rather than the declaration.
