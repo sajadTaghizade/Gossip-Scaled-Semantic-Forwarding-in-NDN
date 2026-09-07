@@ -116,7 +116,7 @@ def exp_main(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows = {}
-        for strategy in ALL_STRATEGIES + ("rc-ndn",):
+        for strategy in ALL_STRATEGIES + ("rc-ndn", "gs-ndn-reasons", "rc-ndn-reasons"):
             config = base_config(domain, strategy=strategy, epsilon=0.2, n_edges=8)
             rows[strategy] = aggregate(bench.metrics(config, seeds))
         out[domain] = rows
@@ -179,6 +179,10 @@ def exp_threshold_transfer(bench: Bench, seeds: Sequence[int]) -> Dict[str, obje
     """
     frontier: Dict[str, object] = {}
     controlled: Dict[str, object] = {}
+    #: The same controller reading the producer's refusal reason. This arm is
+    #: the one that says whether the withdrawn efficiency claim was a property
+    #: of risk control or an artefact of counting false refusals as errors.
+    controlled_reasons: Dict[str, object] = {}
 
     for domain in bench.catalogs:
         per_threshold = {}
@@ -194,6 +198,14 @@ def exp_threshold_transfer(bench: Bench, seeds: Sequence[int]) -> Dict[str, obje
             per_epsilon[str(epsilon)] = aggregate(bench.metrics(config, seeds))
         controlled[domain] = per_epsilon
 
+        per_epsilon_reasons = {}
+        for epsilon in EPSILON_POINTS:
+            config = base_config(
+                domain, strategy="rc-ndn-reasons", epsilon=epsilon, n_edges=8,
+            )
+            per_epsilon_reasons[str(epsilon)] = aggregate(bench.metrics(config, seeds))
+        controlled_reasons[domain] = per_epsilon_reasons
+
         print(f"\n--- {domain}: fixed-threshold frontier ---")
         for threshold, stats in per_threshold.items():
             print(f"    Th={threshold:<5} realised {stats['risk_realised_error']['mean']:.4f}"
@@ -204,6 +216,7 @@ def exp_threshold_transfer(bench: Bench, seeds: Sequence[int]) -> Dict[str, obje
                   f"  isr {stats['isr']['mean']:.3f}")
 
     transfer = _transfer_analysis(frontier, controlled)
+    transfer_reasons = _transfer_analysis(frontier, controlled_reasons)
     for pair, rows in transfer.items():
         print(f"\n--- transfer: {pair} ---")
         for row in rows:
@@ -217,7 +230,39 @@ def exp_threshold_transfer(bench: Bench, seeds: Sequence[int]) -> Dict[str, obje
                 f"rc-ndn err {row['rc_error']:.4f} isr {row['rc_isr']:.3f}  "
                 f"-> {row['verdict']}"
             )
-    return {"frontier": frontier, "rc_ndn": controlled, "transfer": transfer}
+    for pair, rows in transfer_reasons.items():
+        print(f"\n--- transfer (reason-aware): {pair} ---")
+        for row in rows:
+            if row["tuned_threshold"] is None:
+                continue
+            print(
+                f"    eps={row['epsilon']:<5} Th*={row['tuned_threshold']:<5} "
+                f"transferred err {row['transferred_error']:.4f} isr {row['transferred_isr']:.3f} "
+                f"[{'held' if row['transferred_within_budget'] else 'OVER'}]  |  "
+                f"rc-ndn-reasons err {row['rc_error']:.4f} isr {row['rc_isr']:.3f}  "
+                f"-> {row['verdict']}"
+            )
+
+    def tally(rows_by_pair):
+        counts = {}
+        for rows in rows_by_pair.values():
+            for row in rows:
+                if row["tuned_threshold"] is None:
+                    continue
+                counts[row["verdict"]] = counts.get(row["verdict"], 0) + 1
+        return counts
+
+    print("\n--- verdict tally ---")
+    print(f"  rc-ndn          {tally(transfer)}")
+    print(f"  rc-ndn-reasons  {tally(transfer_reasons)}")
+
+    return {
+        "frontier": frontier,
+        "rc_ndn": controlled,
+        "rc_ndn_reasons": controlled_reasons,
+        "transfer": transfer,
+        "transfer_reasons": transfer_reasons,
+    }
 
 
 def _tune_threshold(per_threshold: Dict[str, object], epsilon: float):
@@ -480,7 +525,8 @@ def exp_risk(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows: Dict[str, object] = {}
-        for strategy in ("rc-ndn", "rc-ndn-no-explore", "rc-ndn-no-evidence"):
+        for strategy in ("rc-ndn", "rc-ndn-reasons",
+                         "rc-ndn-no-explore", "rc-ndn-no-evidence"):
             per_epsilon = {}
             for epsilon in epsilons:
                 config = base_config(
@@ -893,7 +939,8 @@ def exp_coverage(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
             undeclared = 1.0 - (declared_n / askable_n if askable_n else 1.0)
 
             per_strategy = {}
-            for strategy in ("saf+es", "gs-ndn", "rc-ndn"):
+            for strategy in ("saf+es", "gs-ndn", "gs-ndn-reasons",
+                             "rc-ndn", "rc-ndn-reasons"):
                 config = base_config(
                     domain, strategy=strategy, epsilon=0.2, n_edges=8,
                     alias_coverage=coverage,
