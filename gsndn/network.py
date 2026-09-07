@@ -24,6 +24,9 @@ from .packets import (
     OUTCOME_NACK,
     OUTCOME_TAGGED,
     OUTCOME_TIMEOUT,
+    REFUSAL_NO_SUCH_SERVICE,
+    REFUSAL_UNAVAILABLE,
+    REFUSAL_UNKNOWN_WORDING,
     SemanticTag,
 )
 from .tables import ContentStore, EmbeddingStore, Fib, PendingMapping, Pit
@@ -264,9 +267,9 @@ class Router(Node):
         entries.extend(self._entries_resolving_to(nack.name))
         for entry in entries:
             if entry.pending_learn is not None and self.strategy is not None:
-                # The guess was wrong. Forget it rather than serving a route
-                # that demonstrably does not carry this name.
-                self.strategy.on_rejected(self, entry.pending_learn)
+                # The guess was answered with a refusal. Whether that refutes the
+                # route depends on why -- see the refusal reasons in packets.py.
+                self.strategy.on_rejected(self, entry.pending_learn, nack.reason)
             outgoing = replace(nack, satisfied_ids=tuple(entry.interest_ids))
             for face_id in entry.in_faces:
                 self._send(outgoing, face_id)
@@ -315,11 +318,13 @@ class Producer(Node):
         """
         target = interest.lookup_name
         if not self.available:
-            self._refuse(interest, in_face, "producer-unavailable")
+            self._refuse(interest, in_face, REFUSAL_UNAVAILABLE)
             return
 
         if target not in self.names:
-            self._refuse(interest, in_face, OUTCOME_MISDELIVERED)
+            # This producer does not publish the name at all: the mapping that
+            # sent the Interest here is wrong, and saying so is a routing fact.
+            self._refuse(interest, in_face, REFUSAL_NO_SUCH_SERVICE)
             return
 
         admitted = (
@@ -333,10 +338,12 @@ class Producer(Node):
             )
             self.sim.schedule(self.service_ms, self._reply, data, in_face)
         else:
-            # A resolution this producer does not recognise ends here. In a real
-            # deployment this is how a confident wrong answer is caught -- and
-            # also, sometimes, how a correct one is wrongly rejected.
-            self._refuse(interest, in_face, OUTCOME_MISDELIVERED)
+            # The name is one this producer publishes, so the route was right;
+            # what failed is that the client's phrasing is not in the schema this
+            # producer declared. It says so rather than reporting a routing
+            # error, because the two are not the same fact and only the producer
+            # is in a position to tell them apart.
+            self._refuse(interest, in_face, REFUSAL_UNKNOWN_WORDING)
 
     def _refuse(self, interest: Interest, in_face: str, reason: str) -> None:
         self.refused += 1

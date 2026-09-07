@@ -131,4 +131,19 @@ OUTCOME_SEMANTIC = "semantic"          # resolved by running the encoder
 OUTCOME_TAGGED = "tagged"              # forwarded on an upstream router's tag
 OUTCOME_NACK = "nack"                  # rejected, no sufficiently similar route
 OUTCOME_MISDELIVERED = "misdelivered"  # forwarded confidently to the wrong producer
+
+#: Why a producer refused, carried on the Nack. The distinction matters because
+#: the two say different things about the *route*. ``no-such-service`` is a
+#: routing error: this producer does not publish the name at all, so the mapping
+#: that sent the Interest here is wrong. ``unknown-wording`` is not: the producer
+#: does publish the name and the route was correct, but the client's phrasing is
+#: not one this producer declared, so it cannot tell whether the request was
+#: meant for it. Collapsing the two -- which is what a single refusal reason
+#: does -- makes every gap in a producer's declared vocabulary look like evidence
+#: against a route that was in fact right. HTTP separates 404 from 406 and DNS
+#: separates NXDOMAIN from NODATA for the same reason; NDN's Nack has no such
+#: distinction, and semantic forwarding is what makes one necessary.
+REFUSAL_NO_SUCH_SERVICE = "no-such-service"
+REFUSAL_UNKNOWN_WORDING = "unknown-wording"
+REFUSAL_UNAVAILABLE = "producer-unavailable"
 OUTCOME_TIMEOUT = "timeout"            # PIT entry expired

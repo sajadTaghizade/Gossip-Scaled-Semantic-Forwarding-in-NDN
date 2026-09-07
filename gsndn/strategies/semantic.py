@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Set
 
 from ..costs import CostModel
 from ..packets import (
+    REFUSAL_UNKNOWN_WORDING,
     OUTCOME_ES_HIT,
     OUTCOME_GOSSIP_HIT,
     OUTCOME_NACK,
@@ -203,10 +204,16 @@ class GsNdn(Saf):
         *,
         verify: bool = True,
         gossip: bool = True,
+        reason_aware: bool = False,
     ) -> None:
         super().__init__(threshold, costs)
         #: Retract mappings a Nack disproves, and only gossip proven ones.
         self.verify = verify
+        #: Read the producer's refusal reason instead of treating every refusal
+        #: as a refutation. Off by default, because every result published
+        #: before this existed was measured with it off.
+        self.reason_aware = reason_aware
+        self.wording_refusals = 0
         #: Accept mappings other routers have proven.  Off for the ablation.
         self.gossip = gossip
         self.tag_misses = 0
@@ -293,16 +300,30 @@ class GsNdn(Saf):
         if entry is not None and self.gossip and router.gossip_protocol is not None:
             router.gossip_protocol.on_confirmed(router, entry)
 
-    def on_rejected(self, router: "Router", mapping: PendingMapping) -> None:
-        super().on_rejected(router, mapping)
-        # The producer refused it, so this route does not serve this name. Drop
-        # the mapping and remember which prefix failed, so the next attempt
-        # picks a different one instead of repeating the mistake. This is the
-        # signal SAF discards: it caches on resolution and never learns that the
-        # route it chose does not work.
+    def on_rejected(
+        self, router: "Router", mapping: PendingMapping, reason: str = "",
+    ) -> None:
+        super().on_rejected(router, mapping, reason)
+        # A refusal means this wording did not get served, so the mapping goes
+        # either way: keeping it would send the next copy of this wording to the
+        # same refusal. What the reason decides is whether the *route* is also
+        # written off.
         router.es.drop(mapping.variant)
-        if self.verify:
-            self.refuted[router.id][mapping.variant].add(mapping.canonical)
+        if not self.verify:
+            return
+        if self.reason_aware and reason == REFUSAL_UNKNOWN_WORDING:
+            # The producer publishes this name -- the route was right, and only
+            # the phrasing was outside what it declared. Blacklisting the prefix
+            # here is what the undifferentiated version gets wrong: the next
+            # attempt is then forced to exclude the correct producer and pick a
+            # worse one, turning a gap in a vocabulary into a misdelivery.
+            self.wording_refusals += 1
+            return
+        # Either an undifferentiated refusal or a genuine routing error: remember
+        # which prefix failed, so the next attempt picks a different one instead
+        # of repeating the mistake. This is the signal SAF discards -- it caches
+        # on resolution and never learns that the route it chose does not work.
+        self.refuted[router.id][mapping.variant].add(mapping.canonical)
 
     def stats(self) -> dict:
         data = super().stats()
@@ -310,6 +331,7 @@ class GsNdn(Saf):
             "tag_misses": self.tag_misses,
             "reresolutions": self.reresolutions,
             "recoveries": self.recoveries,
+            "wording_refusals": self.wording_refusals,
             "refuted_pairs": sum(
                 len(v) for per_router in self.refuted.values() for v in per_router.values()
             ),

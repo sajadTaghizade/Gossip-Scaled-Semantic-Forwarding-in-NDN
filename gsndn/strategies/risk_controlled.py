@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ..costs import CostModel
 from ..packets import (
+    REFUSAL_UNKNOWN_WORDING,
     OUTCOME_ES_HIT,
     OUTCOME_GOSSIP_HIT,
     OUTCOME_NACK,
@@ -67,11 +68,15 @@ class RiskControlledNdn(GsNdn):
         adaptive: bool = False,
         adapt_rate: float = 0.05,
         mix_across_encoders: bool = False,
+        reason_aware: bool = False,
     ) -> None:
         # The threshold survives only as the prior for routes with no evidence,
         # which is what makes this strictly a superset of the fixed-threshold
         # behaviour rather than a different system.
-        super().__init__(threshold, costs, verify=verify, gossip=gossip)
+        super().__init__(
+            threshold, costs, verify=verify, gossip=gossip,
+            reason_aware=reason_aware,
+        )
         self.epsilon = epsilon
         #: Whether calibration observations travel between routers. Off for the
         #: ablation that separates sharing answers from sharing evidence.
@@ -196,9 +201,21 @@ class RiskControlledNdn(GsNdn):
         self._record(router, mapping, correct=True, now=now)
         super().on_confirmed(router, mapping, now)
 
-    def on_rejected(self, router: "Router", mapping: PendingMapping) -> None:
+    def on_rejected(
+        self, router: "Router", mapping: PendingMapping, reason: str = "",
+    ) -> None:
+        if self.reason_aware and reason == REFUSAL_UNKNOWN_WORDING:
+            # Not evidence about this route's score. The encoder picked the
+            # producer that does publish this name, so the decision the budget
+            # governs -- "is this the right service?" -- was answered correctly;
+            # what failed is a vocabulary the producer never declared. Recording
+            # it as an error is what makes an incomplete declaration tighten
+            # every boundary in the network: the controller learns to refuse
+            # decisions that were in fact right.
+            super().on_rejected(router, mapping, reason)
+            return
         self._record(router, mapping, correct=False, now=router.sim.now)
-        super().on_rejected(router, mapping)
+        super().on_rejected(router, mapping, reason)
 
     def _record(self, router: "Router", mapping: PendingMapping, correct: bool, now: float) -> None:
         """Turn one answered forwarding decision into calibration evidence."""

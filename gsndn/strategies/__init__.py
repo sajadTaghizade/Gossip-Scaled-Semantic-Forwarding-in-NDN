@@ -32,6 +32,11 @@ STRATEGIES = (
     "rc-ndn-no-evidence",
     "rc-ndn-no-gossip",
     "rc-ndn-no-explore",
+    # The same two strategies reading the producer's refusal reason instead of
+    # treating every refusal as a refutation. One variable against gs-ndn and
+    # rc-ndn respectively, so the effect is attributable.
+    "gs-ndn-reasons",
+    "rc-ndn-reasons",
 )
 
 
@@ -66,6 +71,17 @@ def build_strategy(
             threshold, costs, epsilon=epsilon, confidence=confidence,
             explore_rate=explore_rate,
         )
+    if name == "gs-ndn-reasons":
+        strategy = GsNdn(threshold, costs, reason_aware=True)
+        strategy.name = "gs-ndn-reasons"
+        return strategy
+    if name == "rc-ndn-reasons":
+        strategy = RiskControlledNdn(
+            threshold, costs, epsilon=epsilon, confidence=confidence,
+            explore_rate=explore_rate, reason_aware=True,
+        )
+        strategy.name = "rc-ndn-reasons"
+        return strategy
     if name == "rc-ndn-aci":
         # Adaptive Conformal Inference: the budget itself moves in response to
         # realised coverage, so a distribution that shifts under the controller

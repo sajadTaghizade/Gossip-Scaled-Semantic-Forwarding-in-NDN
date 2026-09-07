@@ -56,8 +56,16 @@ class ForwardingStrategy:
         """Data came back: the speculative mapping was right."""
         self.confirmations += 1
 
-    def on_rejected(self, router: "Router", mapping: PendingMapping) -> None:
-        """A Nack came back: the speculative mapping was wrong."""
+    def on_rejected(
+        self, router: "Router", mapping: PendingMapping, reason: str = "",
+    ) -> None:
+        """A Nack came back for a speculative mapping.
+
+        ``reason`` is the producer's, verbatim from the Nack. Whether it refutes
+        the mapping depends on which one it is: see the refusal reasons in
+        ``packets.py``. Strategies that do not read it retain the old behaviour
+        of treating every refusal as a refutation.
+        """
         self.retractions += 1
 
     def attach(self, router: "Router") -> None:
