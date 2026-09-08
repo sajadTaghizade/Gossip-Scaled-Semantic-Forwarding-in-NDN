@@ -960,7 +960,69 @@ def exp_coverage(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_horizon(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """How much of the sharing win is a warm-up cost that amortises away.
+
+    Section 2 measures encoder inferences over a 60-second run and reports that
+    a per-router cache grows 60% from 1 to 16 edge routers while gossip grows
+    10%. That comparison is real but it is scoped to a horizon, and the scope
+    was not stated. The reason is mechanical: a cold cache costs one inference
+    per router per distinct wording, so N routers pay it N times, but they pay
+    it *once*. Run for longer and that fixed cost is divided over more traffic,
+    the per-router caches warm, and the gap closes.
+
+    So the honest quantity is not one growth figure but how it moves with the
+    horizon. Absolute counts are not comparable across run lengths -- a longer
+    run simply carries more traffic -- so the rate per thousand requests is
+    what is reported alongside them.
+
+    This does not overturn section 2. It bounds it: sharing is worth most to a
+    network that is still learning its catalog, and least to one that has been
+    up long enough for every router to have seen everything.
+    """
+    horizons = (60_000.0, 240_000.0, 600_000.0)
+    edges = (1, 4, 16)
+    strategies = ("saf", "saf+es", "gs-ndn")
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        for horizon in horizons:
+            per_edges = {}
+            for n_edges in edges:
+                per_strategy = {}
+                for strategy in strategies:
+                    config = base_config(
+                        domain, strategy=strategy, n_edges=n_edges,
+                        duration_ms=horizon,
+                    )
+                    per_strategy[strategy] = aggregate(bench.metrics(config, seeds))
+                per_edges[str(n_edges)] = per_strategy
+            rows[str(horizon)] = per_edges
+        out[domain] = rows
+
+        print(f"\n--- {domain}: encoder inferences by horizon ---")
+        for horizon, per_edges in rows.items():
+            secs = float(horizon) / 1000.0
+            print(f"  {secs:.0f}s")
+            for strategy in strategies:
+                cells = []
+                for n_edges in edges:
+                    m = per_edges[str(n_edges)][strategy]
+                    runs = m["encoder_runs"]["mean"]
+                    per_k = runs / m["requests"]["mean"] * 1000.0
+                    cells.append(f"{n_edges}:{runs:.0f} ({per_k:.1f}/k)")
+                first = per_edges[str(edges[0])][strategy]["encoder_runs"]["mean"]
+                last = per_edges[str(edges[-1])][strategy]["encoder_runs"]["mean"]
+                growth = (last - first) / first * 100.0 if first else float("nan")
+                print(f"    {strategy:<8} {'  '.join(cells)}   growth {growth:+.1f}%")
+            es = per_edges[str(edges[-1])]["saf+es"]["encoder_runs"]["mean"]
+            gs = per_edges[str(edges[-1])]["gs-ndn"]["encoder_runs"]["mean"]
+            print(f"    -> at {edges[-1]} edges gossip saves {(es - gs) / es * 100:.1f}% of inferences")
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
+    "horizon": exp_horizon,
     "coverage": exp_coverage,
     "risk": exp_risk,
     "churn": exp_churn,
