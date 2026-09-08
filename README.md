@@ -23,15 +23,24 @@ to, narrower in what it can claim, and reported as such.
 
 ## The argument
 
-**Caching alone does not scale; sharing does.** SAF's Embedding Store caches a
-resolved name at the router that resolved it. Split the same traffic across
-more edge routers and each cache sees a thinner slice: encoder calls rise 60%
-from 1 to 16 edge routers even though total traffic is unchanged — the
-erosion SAF's own conclusion names as future work. Gossiping a verified
-resolution to every router, once, holds that growth to 10% over the same
-range. This is architectural, not tunable: it costs nothing that a similarity
-threshold or an error budget changes, because it is a property of how many
-times the encoder runs, not of where the cutoff is set.
+**Caching alone scales worse than sharing, on a horizon that has to be stated.**
+SAF's Embedding Store caches a resolved name at the router that resolved it.
+Split the same traffic across more edge routers and each cache sees a thinner
+slice: over a 60-second run, encoder calls rise 60% from 1 to 16 edge routers
+even though total traffic is unchanged — the erosion SAF's own conclusion names
+as future work. Gossiping a verified resolution to every router, once, holds
+that growth to 10% over the same range.
+
+That much is independent of any threshold or error budget: it is a property of
+how many times the encoder runs, not of where the cutoff is set. What it is
+*not* independent of is the horizon and the network size, and both bound it.
+A cold cache costs one inference per router per wording — N routers pay it N
+times, but they pay it once — so over 600 seconds the same comparison is +14%
+against +1%, and gossip's saving at 16 edge routers falls from 26% to 7.5%.
+Below about four edge routers it is a net loss, because there is nobody to
+share with. The claim that survives is narrower than "sharing scales and
+caching does not": **sharing pays a network that is large and still learning
+its catalog, and pays less the longer that network has been up.**
 
 **A tuned threshold does not transfer, and this is the narrower problem
 tackled on top.** SAF selects 0.7 on its own catalog. On the two catalogs
@@ -58,8 +67,9 @@ that shares resolutions also pools the evidence that calibrates them.
 
 ## What comes out
 
-**Sharing is what keeps cost from growing with the network — the primary
-result.** Encoder inferences for the same workload, edge routers 1 → 16:
+**Sharing slows how fast cost grows with the network — the primary result,
+and it is horizon-scoped.** Encoder inferences for the same workload over a
+60-second run, edge routers 1 → 16:
 
 | Edge routers | 1 | 2 | 4 | 8 | 16 | Growth |
 |---|---:|---:|---:|---:|---:|---:|
@@ -71,7 +81,18 @@ SAF pays for every FIB miss, so there is nothing cached to erode and it barely
 grows. SAF+ES caches locally and thins as routers multiply. Sharing what one
 router has already resolved holds growth to a sixth of that. This claim is
 independent of ε or any threshold — it is measured at a single fixed operating
-point and holds regardless of it. See [`RESULTS.md`](RESULTS.md) §2.
+point and holds regardless of it.
+
+**Two scope conditions, both measured, both easy to miss from that table.**
+It is a 60-second run, and the gap is partly a warm-up cost that amortises: over
+600 seconds SAF+ES grows +14% rather than +55%, GS-NDN +1% rather than +9%, and
+gossip's saving at 16 edge routers falls from 26% to 7.5%. The ordering never
+reverses at scale, but the magnitude does — the headline is the short-horizon
+figure. And **below about four edge routers gossip is a net loss**: at one edge
+router there is nobody to share with and anti-entropy costs 4–5% more inferences
+than a plain per-router cache. Sharing pays a network that is large and still
+learning its catalog; it pays progressively less as that network settles. See
+[`RESULTS.md`](RESULTS.md) §2.
 
 **The error budget holds, but the claim that it forwards more efficiently was
 tested and withdrawn.** Measured out of sample:

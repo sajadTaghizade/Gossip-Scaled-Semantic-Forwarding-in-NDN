@@ -17,14 +17,22 @@ is said explicitly wherever it is done, and the unpaired means are printed
 alongside so nothing rests on the paired form alone.
 
 Two results carry this document, and they are not equally strong. §2–3 is
-architectural and holds regardless of any threshold or budget: sharing a
-verified resolution by gossip, instead of caching it per router, keeps
-recognition cost from growing with the network. §5–10 is narrower and reports
-a claim that was tested and partly withdrawn: replacing the similarity
-threshold with an online error budget does not forward more efficiently than
-a threshold tuned on a labelled target domain (§6), but it needs no such
-catalog to tune and keeps most of verification's advantage under a churn
-event a threshold-only design cannot even see (§8).
+the stronger one and holds regardless of any threshold or budget: sharing a
+verified resolution by gossip, instead of caching it per router, slows how
+fast recognition cost grows with the network. It carries two scope conditions
+that §2 measures rather than assumes — the effect shrinks by about two thirds
+as the run lengthens from 60 to 600 seconds, and it reverses below roughly four
+edge routers — so what it supports is a claim about large networks still
+learning their catalogs, not a standing property of the two designs.
+
+§5–10 is narrower and reports a claim that was tested and withdrawn: replacing
+the similarity threshold with an online error budget does not forward more
+efficiently than a threshold tuned on a labelled target domain (§6), and §16
+shows that correcting a real bias in its evidence does not rescue that
+comparison either. What survives is that it needs no labelled catalog to tune,
+that it keeps most of verification's advantage under a churn event a
+threshold-only design cannot even see (§8), and that where evidence is scarce
+or biased the correction in §16 is worth up to 0.08 satisfaction.
 
 ---
 
@@ -58,6 +66,45 @@ happens. SAF+ES caches per router: as traffic splits across more routers each
 cache sees a thinner slice, and the same total traffic produces 60% more
 inferences — **the Embedding Store's benefit erodes as the network grows**,
 which is the setting SAF's conclusion names as future work. Sharing restores it.
+
+### The horizon this is measured over, and why it matters
+
+That table is one 60-second run, and the figure moves with the run length. It
+has to. A cold cache costs one inference per router per distinct wording: N
+routers pay it N times, but they pay it **once**. Run for longer and that fixed
+cost is spread over more traffic, the per-router caches warm up, and the gap
+closes. Reporting a single growth figure without its horizon overstates a
+transient as a steady state, so here is the sweep — 1 → 16 edge routers at three
+horizons, twenty seeds, both domains:
+
+| Horizon | SAF+ES growth | GS-NDN growth | Gossip saves at 16 edges |
+|---|---:|---:|---:|
+| 60 s | +55% / +61% | +9% / +15% | **26% / 27%** |
+| 240 s | +31% / +37% | +6% / +12% | **16% / 17%** |
+| 600 s | +14% / +21% | +1% / +9% | **7.5% / 9.5%** |
+
+*hospital / city.*
+
+**The ordering never reverses at scale, and the magnitude falls by roughly two
+thirds.** GS-NDN grows less than SAF+ES at every horizon on both domains, so the
+qualitative claim in the table above survives; what does not survive is reading
++60% against +10% as a standing property of the two designs. It is the 60-second
+figure.
+
+**And below about four edge routers, gossip loses outright.** At one edge router
+there is nobody to share with, so anti-entropy is pure overhead: 4.4–5.5% *more*
+inferences than a plain per-router cache on hospital, 0.9–2.3% more on city, at
+every horizon. The benefit appears from roughly four edge routers upward. A
+reader of the first table alone would not know that.
+
+So the scope of this result is: **sharing pays a network that is large and still
+learning its catalog, and pays progressively less as it settles.** The regimes
+where it earns its cost are the ones a static 60-second measurement flatters —
+networks being brought up, catalogs still growing, producers still arriving —
+and section 8's churn experiments are the closest thing here to measuring one of
+them directly. A large, stable, long-running deployment with a fixed catalog is
+the case where a per-router cache eventually catches up on its own, and this
+work has no result showing otherwise.
 
 ## 3. Latency under load
 
@@ -687,3 +734,110 @@ same channel — but what the operator gets for it is worth less.
 Not modelled: a producer whose declaration is adversarially wrong rather than
 merely narrow. Section 9 is the closest thing, and it attacks the gossip channel
 rather than the declaration.
+
+## 16. The free labels are biased, not just noisy
+
+Section 15 measured what an incomplete producer declaration costs and found the
+risk-controlled arm losing most: 0.919 → 0.762 on hospital as coverage drops to
+0.5, while its *refusal rate stays lowest of the three*. It was not being refused
+more. It was forwarding less. This section is why, and what happens when the
+cause is removed.
+
+### The cause
+
+A producer refuses for two reasons that mean different things about the route.
+It may not publish the name at all — the mapping that sent the Interest here is
+wrong, and that is a routing fact. Or it may publish the name and not recognise
+the client's *phrasing*, because the phrasing is outside the schema it declared.
+Then the route was right and only the vocabulary failed.
+
+Only the producer can tell these apart, and it was discarding the distinction:
+`Producer.on_interest` refused both with the same reason. Every gap in a
+producer's declared vocabulary therefore arrived at the forwarding plane as
+evidence against a route that was in fact correct. For `gs-ndn` that blacklists
+the right prefix, so the next attempt is forced to exclude the correct producer
+and pick a worse one. For `rc-ndn` it is worse: the false refusal enters the
+route's calibration window as a genuine error, the Wilson upper bound rises, the
+boundary tightens, and the controller starts declining decisions that would have
+been served.
+
+The fix is a refusal reason on the Nack — `no-such-service` against
+`unknown-wording` — and a controller that does not count the second as evidence
+about the route's score. HTTP separates 404 from 406 and DNS separates NXDOMAIN
+from NODATA for the same reason. NDN's Nack has no such distinction, and
+semantic forwarding is what makes one necessary. The arms below are
+`gs-ndn-reasons` and `rc-ndn-reasons`; everything else is held fixed.
+
+### Where it pays
+
+Satisfaction against declared alias coverage, eight edge routers, ε = 0.2:
+
+| coverage | undeclared | rc-ndn | rc-ndn-reasons | Δ | gs-ndn | gs-ndn-reasons | Δ |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1.0 | 0.000 | 0.919 | 0.947 | +0.027 | 0.940 | 0.932 | −0.008 |
+| 0.9 | 0.100 | 0.864 | 0.924 | +0.061 | 0.917 | 0.911 | −0.006 |
+| 0.7 | 0.292 | 0.801 | 0.880 | **+0.079** | 0.874 | 0.870 | −0.004 |
+| 0.5 | 0.505 | 0.762 | 0.839 | +0.076 | 0.826 | 0.827 | +0.001 |
+
+City, same protocol: rc-ndn 0.956 / 0.854 / 0.759 / 0.710 against reason-aware
+0.939 / 0.900 / 0.841 / 0.772 — deltas −0.017, +0.046, **+0.082**, +0.062.
+
+**The effect has a regime, and that is the evidence it is the mechanism claimed.**
+The gain grows as declarations get worse and peaks where roughly a third of
+wordings are undeclared, because the correction can only recover what false
+refusals were costing. Where there is nothing to correct — city at full coverage
+— it loses 0.017, since skipping those observations only costs the controller
+evidence. A correction that helped uniformly would be weaker evidence, not
+stronger: it would not be behaving like a correction to this particular bias.
+
+`gs-ndn-reasons` is the control and behaves like one, within ±0.008 throughout.
+It has no calibration windows to protect, so reading the reason buys it nothing
+and giving up the blacklist costs it a little. **The damage was in the evidence
+path, not the refutation path.**
+
+The same shape appears against the budget rather than against coverage. Hospital
+satisfaction, full coverage:
+
+| ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| rc-ndn | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | **0.959** | **0.967** |
+| rc-ndn-reasons | 0.821 | 0.848 | **0.928** | **0.946** | **0.947** | 0.949 | 0.952 |
+
+Tight budgets gain up to 0.087, loose budgets lose up to 0.015, and city agrees.
+Same account: a tight budget is where one false refusal does most damage, because
+it pushes a controller already close to refusing everything over the edge. A
+loose budget has nothing for the correction to unlock. **The realised error stays
+inside the budget in all fourteen settings on both domains**, so the guarantee
+survives the correction.
+
+### Where it does not
+
+Against the opponent of §6 — a threshold tuned on one domain and carried to the
+other — reading the reason makes things **worse**, over fourteen comparisons:
+
+| | trade | transferred threshold dominates | rc dominates |
+|---|---:|---:|---:|
+| rc-ndn | 10 | 4 | 0 |
+| rc-ndn-reasons | 3 | **11** | 0 |
+
+The mechanism is visible in the error column. Not counting unknown-wording
+refusals makes the controller more permissive, so satisfaction *and* realised
+error both rise — and the opponent is already sitting at satisfaction 0.97 with
+error 0.011. Section 5 is why it is that strong: precision stays above 0.99
+across the entire threshold sweep, so on these catalogs a permissive fixed
+threshold is very nearly free.
+
+**So §6's withdrawal stands.** This corrects a real bias in the label channel and
+is worth up to 0.08 satisfaction where declarations are incomplete or budgets are
+tight. It does not make a learned budget beat a tuned threshold, and on the
+transfer comparison it gives up ground. The honest scope is narrower than the
+first five-seed run suggested, and it is reported here rather than at the seed
+count that flattered it.
+
+### What this does not settle
+
+The catalogs here are generated, so `alias_coverage` is a knob rather than a
+measurement of how completely real operators declare their services. Nothing
+here says where a real deployment sits on that axis, and the whole value of the
+correction depends on it. That is the first thing a real name corpus would
+settle.
