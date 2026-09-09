@@ -1,0 +1,89 @@
+% Related work for Gossip-Scaled Semantic Forwarding in NDN.
+%
+% Entries marked UNVERIFIED had their title and venue seen only in a search
+% result, not in the paper itself -- the machine this was assembled on could not
+% reach arxiv.org, ieeexplore.ieee.org, dl.acm.org or doi.org. Check those
+% before citing them in a submission. See references/README.md.
+
+% -- The synchronisation NDN already ships ------------------------------------
+% Anti-entropy dataset synchronisation is not new to NDN. Our gossip layer
+% carries different payload (verified name->prefix resolutions and calibration
+% evidence) but the mechanism is this one, and saying so is not optional.
+
+@techreport{zhu2013chronosync,
+  author      = {Zhenkai Zhu and Alexander Afanasyev},
+  title       = {Let's {ChronoSync}: Decentralized Dataset State Synchronization in Named Data Networking},
+  institution = {Named Data Networking Project},
+  year        = {2013},
+  url         = {https://named-data.net/publications/chronosync/}
+}
+
+@inproceedings{hoque2013nlsr,
+  author    = {A. K. M. Mahmudul Hoque and Syed Obaid Amin and Adam Alyyan and Beichuan Zhang and Lixia Zhang and Lan Wang},
+  title     = {{NLSR}: Named-data Link State Routing Protocol},
+  booktitle = {Proceedings of the 3rd ACM SIGCOMM Workshop on Information-Centric Networking (ICN '13)},
+  pages     = {15--20},
+  year      = {2013},
+  doi       = {10.1145/2491224.2491231},
+  url       = {https://conferences.sigcomm.org/sigcomm/2013/papers/icn/p15.pdf}
+}
+
+% -- Name collision -----------------------------------------------------------
+% "SAF" already means this to an NDN reader. Our shorthand for Amadeo et al.'s
+% semantic forwarding had to change.
+
+@article{posch2017saf,
+  author  = {Daniel Posch and Benjamin Rainer and Hermann Hellwagner},
+  title   = {{SAF}: Stochastic Adaptive Forwarding in Named Data Networking},
+  journal = {IEEE/ACM Transactions on Networking},
+  volume  = {25},
+  number  = {2},
+  pages   = {1089--1102},
+  year    = {2017},
+  doi     = {10.1109/TNET.2016.2614710},
+  url     = {https://arxiv.org/abs/1505.05259}
+}
+
+% -- Learned per-item boundaries under an error bound -------------------------
+
+@article{schroeder2025vcache,
+  author  = {Luis Gaspar Schroeder and Shu Liu and Alejandro Cuadron and Mark Zhao and Stephan Krusche and Alfons Kemper and Matei Zaharia and Joseph E. Gonzalez},
+  title   = {{vCache}: Verified Semantic Prompt Caching},
+  journal = {arXiv preprint arXiv:2502.03771},
+  year    = {2025},
+  url     = {https://arxiv.org/abs/2502.03771}
+}
+
+@inproceedings{finamore2022approximatekey,
+  author    = {Alessandro Finamore and James Roberts and Massimo Gallo and Dario Rossi},
+  title     = {Accelerating Deep Learning Classification with Error-controlled Approximate-key Caching},
+  booktitle = {IEEE INFOCOM 2022 -- IEEE Conference on Computer Communications},
+  year      = {2022},
+  url       = {https://arxiv.org/abs/2112.06671}
+}
+
+% -- The bias our refusal-reason result is an instance of ---------------------
+% Learning from feedback that is only observed for the items the system chose
+% to act on, where the choice and the outcome share a cause, is missing-not-at-
+% random / exposure bias. Our contribution is locating one in an NDN forwarding
+% plane and naming its mechanism, not discovering the pattern.
+
+@inproceedings{saito2020unbiased,
+  author    = {Yuta Saito and Suguru Yaginuma and Yuta Nishino and Hayato Sakata and Kazuhide Nakata},
+  title     = {Unbiased Recommender Learning from Missing-Not-At-Random Implicit Feedback},
+  booktitle = {Proceedings of the 13th ACM International Conference on Web Search and Data Mining (WSDM)},
+  year      = {2020},
+  url       = {https://arxiv.org/abs/1909.03601}
+}
+
+% -- Adjacent recent work in semantic ICN ------------------------------------
+
+@inproceedings{hlaing2026neuname,
+  author    = {Htet Htet Hlaing and Hitoshi Asaeda},
+  title     = {{NeuName}: Autonomous Semantic Naming for {ICN} using Multimodal Neural Intelligence},
+  booktitle = {2026 IEEE 12th International Conference on Network Softwarization (NetSoft)},
+  pages     = {126--134},
+  year      = {2026},
+  doi       = {10.1109/NetSoft70012.2026.11603541},
+  note      = {UNVERIFIED: metadata from a search result; full text not accessible}
+}

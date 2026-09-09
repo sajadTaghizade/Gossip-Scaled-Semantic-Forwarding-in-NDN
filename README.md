@@ -6,18 +6,43 @@ forwarding drops the request. Embedding the name and matching it by cosine
 similarity fixes that — at the cost of running a transformer in the forwarding
 path.
 
-That cost does not disappear with per-router caching. SAF's Embedding Store
-caches a resolution where it was made; split the same traffic across more
-routers and each cache sees a thinner slice of it, so the network re-runs the
-encoder more as it grows, not less — a failure mode SAF's own conclusion names
-as future work. This work shares a resolution, once verified, over
-anti-entropy gossip, so the rest of the network does not re-derive what one
-router has already confirmed. On top of that shared substrate, it also asks
-whether the similarity threshold itself can be replaced by something that
-does not need retuning per catalog — an error budget the network holds itself
-to, narrower in what it can claim, and reported as such.
+That cost does not disappear with per-router caching. The Embedding Store of
+Amadeo et al. caches a resolution where it was made; split the same traffic
+across more routers and each cache sees a thinner slice of it, so over a short
+horizon the network re-runs the encoder more as it grows, not less — a failure
+mode their own conclusion names as future work. This work shares a resolution,
+once verified, over anti-entropy gossip, so the rest of the network does not
+re-derive what one router has already confirmed.
+
+**Two things this repository reports, and they are not the same kind of thing.**
+The first is a scaling result with its scope measured rather than assumed:
+sharing slows how fast recognition cost grows with the network, by an amount
+that falls by roughly two thirds as the run lengthens and that reverses
+entirely below about four edge routers (§2). The second is a defect found in
+the feedback channel every verified strategy here calibrates against: a
+producer's refusal conflates "this name is not mine" with "this name is mine
+but I do not know that wording", so an incomplete declaration arrives as
+evidence against routes that were correct. Separating the two reasons is worth
+up to 0.08 satisfaction where declarations are incomplete or budgets are tight
+(§16).
+
+Riding on the shared substrate is a third thing that is **not** presented as a
+contribution: an error budget replacing the similarity threshold. It was tested
+against a threshold tuned on one catalog and carried to another, it lost, and
+the efficiency claim was withdrawn (§6) — correcting the feedback defect above
+does not rescue that comparison either. It is kept here as a measured component
+with a narrow surviving property (it needs no labelled target catalog to tune)
+and is reported as such.
 
 **Authors:** Mohammad Mahdi Yari, Sajjad Taghizadeh · **Advisor:** Dr. Mohammadreza Shakournia
+
+> **On the name "SAF".** Earlier revisions used SAF as shorthand for the
+> semantic name-based forwarding of Amadeo et al. That collides with SAF,
+> Stochastic Adaptive Forwarding (Posch, Rainer and Hellwagner, IEEE/ACM
+> Transactions on Networking 25(2), 2017), which is what an NDN reader will
+> assume. Prose now says "semantic forwarding" or names the authors; the
+> strategy keys in code (`saf`, `saf+es`) are unchanged so that the result
+> files stay readable, and mean the semantic scheme throughout.
 
 ---
 
@@ -60,10 +85,20 @@ by-product of forwarding. Verified semantic caching for LLM prompts needs a
 judge model to obtain the same signal, which is expensive enough to be the thing
 you were avoiding.
 
-So, as a second contribution riding on the gossip-scaled forwarding path: **the
-operator can set an error budget ε instead of a threshold**, each route learns
-its own decision boundary from observed outcomes, and the same gossip channel
-that shares resolutions also pools the evidence that calibrates them.
+So the operator can set an error budget ε instead of a threshold: each route
+learns its own decision boundary from observed outcomes, and the same gossip
+channel that shares resolutions also pools the evidence that calibrates them.
+
+**That was proposed as a second contribution and it did not survive testing.**
+Against a threshold tuned on one catalog and carried to the other it
+Pareto-dominates in none of fourteen comparisons (§6). What is reported instead
+is what the attempt *exposed*: those free labels are not merely noisy, they are
+**biased**, because a producer's refusal cannot distinguish a wrong route from
+a wording it never declared. That is the finding this repository stands on
+alongside the scaling result, and it is an instance of a pattern with a name —
+missing-not-at-random feedback, familiar from implicit-feedback recommendation
+(Saito et al., WSDM 2020) — located here in an NDN forwarding plane and traced
+to a specific protocol gap.
 
 ## What comes out
 
@@ -104,8 +139,9 @@ tested and withdrawn.** Measured out of sample:
 
 Put against a fixed threshold tuned on one domain and carried to the other,
 rc-ndn Pareto-dominates in none of fourteen comparisons; the transferred
-threshold dominates in four. What survives is narrower than efficiency — call
-it **zero-tuning**: rc-ndn held its budget in all fourteen tests, where the
+threshold dominates in four, and reading the refusal reason (§16) makes that
+tally 11 to 3 against, not better. What survives is narrower than efficiency —
+call it **zero-tuning**: rc-ndn held its budget in all fourteen tests, where the
 transferred threshold missed once, at the tightest budget (ε = 0.02, tuned on
 city, realising 0.032 on hospital), and rc-ndn needs no labelled sample of the
 domain it runs on to get there, because it calibrates from live producer
@@ -245,15 +281,74 @@ event happens to touch the routing plane.
 *Gossip loses when there is nobody to share with.* On a single edge router it is
 a net cost; the benefit appears from about four edge routers upward.
 
-## Sources
+## Related work
+
+BibTeX for everything below is in [`references.bib`](references.bib); the
+longer annotated list, with a verification status per entry, is in
+[`references/README.md`](references/README.md). Entries there marked
+*unverified* were assembled from search results rather than read.
+
+**Semantic forwarding in ICN — the line this extends.**
 
 - Amadeo et al., *Enhancing IoT Service Discovery Through Semantic Name-Based
-  Forwarding*, IEEE Internet of Things Magazine, 2026 — SAF, the Embedding
-  Store, Th = 0.7, and the single-router evaluation this work extends.
-- Raza et al., *INF-NDN IoT*, IEEE Access, 2024 — LDA semantic tags,
-  distributed through a central Principal Node.
-- Askar et al., *SEF*, CMC, 2024 — the energy model and the 20-seed protocol.
-- Chan et al., *Fuzzy Interest Forwarding*, 2017 — Word2Vec component matching,
-  applied at both Content Store and FIB.
-- Zhu et al., *vCache: Verified Semantic Prompt Caching*, 2025.
-- Lu et al., *Federated Conformal Predictors*, ICML 2023.
+  Forwarding*, IEEE Internet of Things Magazine, 2026 — the semantic scheme,
+  the Embedding Store, Th = 0.7, and the single-router evaluation extended
+  here. It is a magazine article, so short and tutorial-framed.
+- Chan et al., *Fuzzy Interest Forwarding*, AINTEC 2017 — Word2Vec component
+  matching at both Content Store and FIB. The original statement of this
+  problem, and implemented in ndnSIM with released code.
+- Raza et al., *INF-NDN IoT*, IEEE Access, 2024 — LDA semantic tags routed
+  through central supernodes. A *competing* answer to the problem §2 attacks:
+  concentrate semantic resolution rather than replicate or share it.
+- Hlaing and Asaeda, *NeuName*, IEEE NetSoft 2026 `[hlaing2026neuname]` —
+  neural semantic naming for ICN. **We could not obtain the full text** (IEEE
+  paywall) and place it from title and venue only: it addresses how names are
+  *generated*, where this work takes names as given and addresses how a
+  forwarding decision over them is *calibrated*. That distinction should be
+  re-checked against the paper before it is relied on.
+- Askar et al., *SEF*, CMC, 2024 — energy model and 20-seed protocol. Cited for
+  those; it is reinforcement-learning next-hop selection over geography and
+  battery, with no semantic matching, and `gsndn/strategies/sef.py` says so.
+
+**Synchronisation NDN already has — why the gossip layer is not novel
+mechanism.** Anti-entropy dataset synchronisation is a decade old in NDN and
+the layer here is an instance of it carrying different payload.
+
+- Zhu and Afanasyev, *Let's ChronoSync*, 2013 `[zhu2013chronosync]` — condensed
+  digests exchanged to reconcile dataset differences; PSync and State Vector
+  Sync succeed it.
+- Hoque et al., *NLSR*, ACM ICN workshop at SIGCOMM 2013 `[hoque2013nlsr]` —
+  already floods name-prefix reachability network-wide over such a layer. §2
+  measures an approximation of an unbounded sync layer (`gs-ndn-full-sync`)
+  precisely because "why not just announce the prefix" is the first question
+  this work has to answer.
+
+**Learned boundaries under an error bound — why the budget is not novel
+mechanism either.**
+
+- Schroeder et al., *vCache*, 2025 `[schroeder2025vcache]` — per-item learned
+  thresholds under a user-set error bound, for LLM prompt caching. The direct
+  precedent for §6.
+- Finamore et al., *Error-controlled Approximate-key Caching*, INFOCOM 2022
+  `[finamore2022approximatekey]` — similarity caching of model outputs with
+  explicit error control, in a networking setting. Closest published ancestor
+  of both the premise and §6.
+- Lu et al., *Federated Conformal Predictors*, ICML 2023 — pooling calibration
+  across parties, which is what the evidence channel does.
+
+**The bias in §16 is an instance of a known pattern.**
+
+- Saito et al., *Unbiased Recommender Learning from Missing-Not-At-Random
+  Implicit Feedback*, WSDM 2020 `[saito2020unbiased]` — learning from feedback
+  observed only where the system chose to act, when the choice and the outcome
+  share a cause. §16 is that pattern in an NDN forwarding plane: the label a
+  route receives depends on a producer's declared vocabulary, which is also
+  what determines whether the request could be served. The contribution is
+  locating it here and identifying the protocol gap that causes it — a Nack
+  with no equivalent of HTTP's 406 or DNS's NODATA — not the pattern itself.
+
+**Name collision.**
+
+- Posch, Rainer and Hellwagner, *SAF: Stochastic Adaptive Forwarding in NDN*,
+  IEEE/ACM Transactions on Networking 25(2), 2017 `[posch2017saf]` — the
+  established meaning of "SAF" in this literature. See the note at the top.

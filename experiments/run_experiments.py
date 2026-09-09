@@ -546,7 +546,14 @@ def exp_risk(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
-CHURN_STRATEGIES = ("saf+es", "gs-ndn", "gs-ndn-no-verify", "rc-ndn", "rc-ndn-aci")
+CHURN_STRATEGIES = (
+    "saf+es", "gs-ndn", "gs-ndn-no-verify", "rc-ndn", "rc-ndn-aci",
+    # Schema drift is the event that *produces* unknown-wording refusals --
+    # a producer narrowing what it answers to is exactly a declaration going
+    # incomplete -- so this is where reading the refusal reason should matter
+    # most, and the arm has to be here for that to be measurable.
+    "rc-ndn-reasons",
+)
 
 
 def exp_churn(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
@@ -703,7 +710,7 @@ def exp_poisoning(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows: Dict[str, object] = {}
-        for strategy in ("gs-ndn", "gs-ndn-no-verify", "rc-ndn"):
+        for strategy in ("gs-ndn", "gs-ndn-no-verify", "rc-ndn", "rc-ndn-reasons"):
             per_share = {}
             for share in shares:
                 config = base_config(
@@ -960,6 +967,35 @@ def exp_coverage(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+#: An approximation of an unbounded sync layer, for the comparison in
+#: exp_horizon. It is GS-NDN with the anti-entropy parameters opened up:
+#: every router reconciles with every peer it has each round, and no cap on how
+#: many entries one exchange may carry.
+#:
+#: This is a *bound*, not an implementation of NDN Sync. ChronoSync, PSync and
+#: SVS differ from each other and from this in how state is digested, how
+#: differences are detected, and how much of the dataset a single exchange
+#: names; NLSR floods prefix LSAs over such a layer rather than gossiping
+#: resolutions. What this arm answers is narrower and is the only question the
+#: horizon result actually raises: if the sync were free of the fanout and
+#: delta limits our gossip imposes, how much more of the encoder cost would it
+#: remove, and what would it cost in messages to do so.
+FULL_SYNC = "gs-ndn-full-sync"
+FULL_SYNC_FANOUT = 64
+FULL_SYNC_MAX_DELTA = 1_000_000
+
+
+def horizon_config(domain: str, strategy: str, **kw):
+    """Config for one horizon arm, expanding the pseudo-strategy above."""
+    if strategy == FULL_SYNC:
+        return base_config(
+            domain, strategy="gs-ndn",
+            gossip_fanout=FULL_SYNC_FANOUT, gossip_max_delta=FULL_SYNC_MAX_DELTA,
+            **kw,
+        )
+    return base_config(domain, strategy=strategy, **kw)
+
+
 def exp_horizon(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     """How much of the sharing win is a warm-up cost that amortises away.
 
@@ -982,7 +1018,7 @@ def exp_horizon(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     """
     horizons = (60_000.0, 240_000.0, 600_000.0)
     edges = (1, 4, 16)
-    strategies = ("saf", "saf+es", "gs-ndn")
+    strategies = ("saf", "saf+es", "gs-ndn", FULL_SYNC)
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows: Dict[str, object] = {}
@@ -991,9 +1027,8 @@ def exp_horizon(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
             for n_edges in edges:
                 per_strategy = {}
                 for strategy in strategies:
-                    config = base_config(
-                        domain, strategy=strategy, n_edges=n_edges,
-                        duration_ms=horizon,
+                    config = horizon_config(
+                        domain, strategy, n_edges=n_edges, duration_ms=horizon,
                     )
                     per_strategy[strategy] = aggregate(bench.metrics(config, seeds))
                 per_edges[str(n_edges)] = per_strategy
@@ -1015,9 +1050,19 @@ def exp_horizon(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
                 last = per_edges[str(edges[-1])][strategy]["encoder_runs"]["mean"]
                 growth = (last - first) / first * 100.0 if first else float("nan")
                 print(f"    {strategy:<8} {'  '.join(cells)}   growth {growth:+.1f}%")
-            es = per_edges[str(edges[-1])]["saf+es"]["encoder_runs"]["mean"]
-            gs = per_edges[str(edges[-1])]["gs-ndn"]["encoder_runs"]["mean"]
-            print(f"    -> at {edges[-1]} edges gossip saves {(es - gs) / es * 100:.1f}% of inferences")
+            top = per_edges[str(edges[-1])]
+            es = top["saf+es"]["encoder_runs"]["mean"]
+            gs = top["gs-ndn"]["encoder_runs"]["mean"]
+            fs = top[FULL_SYNC]["encoder_runs"]["mean"]
+            print(f"    -> at {edges[-1]} edges gossip saves {(es - gs) / es * 100:.1f}% of inferences, "
+                  f"full-sync {(es - fs) / es * 100:.1f}%")
+            gs_bytes = top["gs-ndn"]["gossip_bytes"]["mean"]
+            fs_bytes = top[FULL_SYNC]["gossip_bytes"]["mean"]
+            gs_sent = top["gs-ndn"]["gossip_mappings_sent"]["mean"]
+            fs_sent = top[FULL_SYNC]["gossip_mappings_sent"]["mean"]
+            ratio = fs_bytes / gs_bytes if gs_bytes else float("nan")
+            print(f"       messages: gs-ndn {gs_sent:.0f} mappings / {gs_bytes / 1000:.0f} kB, "
+                  f"full-sync {fs_sent:.0f} / {fs_bytes / 1000:.0f} kB  ({ratio:.1f}x bytes)")
     return out
 
 

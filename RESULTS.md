@@ -463,6 +463,49 @@ second. Clipping the range is a floor and a ceiling, not a fix.
 
 ## 9. Compromised routers
 
+### Threat model
+
+**What the attacker controls.** A share of the routers, chosen uniformly at
+random and fixed for the run. A compromised router is a full participant, not
+an outsider: it holds the keys and the peer relationships of an honest router,
+so nothing here is defeated by authenticating the channel. It behaves correctly
+on the forwarding path — it forwards Interests, returns Data, and answers
+digests — and lies only in what it contributes to gossip. That is deliberate: a
+router that simply drops traffic is a denial-of-service problem the ICN
+literature already treats, and it would confound the measurement of what the
+*learning* channel is worth.
+
+**What it can do.** Inject false mappings (a wording bound to a producer that
+does not serve it) and false calibration evidence (fabricated observations that
+a score succeeded), and re-inject both every round, so retraction after one
+round trip does not settle anything. It knows the catalog well enough to target
+names clients actually request, which is the strong assumption here and makes
+the attack far more effective than random poisoning.
+
+**What it cannot do.** Forge another router's identity, partition the network,
+observe or alter traffic it does not carry, or make a producer answer a name it
+does not publish. A producer is trusted about its own services throughout; the
+attack is on what routers tell *each other*, not on what a producer says. That
+boundary matters for §16 in particular: the refusal reason is authored by the
+producer, so a compromised **router** cannot forge one, and nothing here
+measures what a compromised **producer** could do with it.
+
+**What limits the damage, structurally.** A router's own confirmed mappings
+outrank anything it is told. That is not a defence added against this attack;
+it falls out of only gossiping what a returned Data packet proved, and it is
+why the degradation below is graceful rather than total.
+
+**What is not implemented, and why it is a limitation and not a design choice.**
+Provenance (signing an observation with the router that made it, so a lie can be
+attributed) and reputation (down-weighting a peer whose contributions are
+repeatedly refuted) are the two obvious defences, and neither is here. The
+budget in §6 is a guarantee conditional on honest reporting, and this section
+measures what that condition is worth rather than removing it. A deployment
+facing this threat model needs those mechanisms; this work does not show they
+would be sufficient, only that the attack lands and by how much.
+
+### What the attack does
+
 Two things travel over gossip and each is poisoned differently. A **false
 mapping** sends Interests to the wrong producer and is exposed by that
 producer's refusal. **False calibration evidence** is quieter: fabricated "this
