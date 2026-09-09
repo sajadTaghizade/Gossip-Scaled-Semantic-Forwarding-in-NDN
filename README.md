@@ -67,6 +67,18 @@ share with. The claim that survives is narrower than "sharing scales and
 caching does not": **sharing pays a network that is large and still learning
 its catalog, and pays less the longer that network has been up.**
 
+**And sharing harder does not help.** NDN already ships anti-entropy dataset
+sync, so the obvious objection is to turn that on and drop this layer.
+`gs-ndn-full-sync` bounds that: the same protocol with every router
+reconciling with every peer each round and no cap per exchange. It removes
+*fewer* inferences than the bounded version (21% against 26% at 16 edge
+routers) while sending 1.2–1.6× the bytes, because anti-entropy at fanout 2
+already reaches everyone in O(log N) rounds and what limits the saving is how
+many distinct wordings the network has yet to see. So the part of the design
+doing the work is *what* is shared and *when* — a mapping, only once a Data
+packet proved it — not how aggressively. An implementation over PSync or SVS
+is a reasonable engineering choice this work does not argue against.
+
 **A tuned threshold does not transfer, and this is the narrower problem
 tackled on top.** SAF selects 0.7 on its own catalog. On the two catalogs
 here that setting gives recall of 0.66 and 0.50, while the best operating
@@ -260,9 +272,9 @@ rather than folded into the reported rate.
 
 *Poisoning degrades gracefully; it is not prevented, and risk control does not
 help.* Against a persistent attacker re-injecting every gossip round,
-GS-NDN's satisfaction falls from 0.940 to 0.747 at 50% compromise and its
-realised error rises from 0.027 to 0.165 (risk-controlled: 0.919 to 0.754, and
-0.014 to 0.170) — the budget is a guarantee conditional on honest reporting, and
+GS-NDN's satisfaction falls from 0.940 to 0.745 at 50% compromise and its
+realised error rises from 0.027 to 0.168 (risk-controlled: 0.919 to 0.753, and
+0.014 to 0.169) — the budget is a guarantee conditional on honest reporting, and
 that condition is exactly what the attack removes. All three strategies degrade
 alike; what limits the damage is that a router's own confirmed mappings outrank
 anything it is told. Provenance and reputation are left as future work.

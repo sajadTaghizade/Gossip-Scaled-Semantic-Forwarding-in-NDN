@@ -97,6 +97,48 @@ inferences than a plain per-router cache on hospital, 0.9–2.3% more on city, a
 every horizon. The benefit appears from roughly four edge routers upward. A
 reader of the first table alone would not know that.
 
+### Would an unbounded sync layer do better?
+
+The obvious objection to all of this is that NDN already has anti-entropy
+dataset synchronisation — ChronoSync, PSync, State Vector Sync — and NLSR
+already floods name-prefix reachability over such a layer. If sharing is what
+helps, why not simply turn that on and let it run without the fanout and delta
+limits this gossip layer imposes?
+
+`gs-ndn-full-sync` answers the narrow version of that question. It is this
+protocol with the limits opened up: every router reconciles with every peer it
+has each round instead of two, and no cap on how many entries one exchange may
+carry. **It is a bound, not an implementation of NDN Sync** — those protocols
+differ from each other and from this one in how state is digested and how much
+of a dataset one exchange names, and NLSR carries prefix LSAs rather than
+resolutions. What it can say is what an upper limit on sharing aggression buys
+and costs, at 16 edge routers:
+
+| Horizon | GS-NDN saves | full-sync saves | GS-NDN gossip | full-sync gossip |
+|---|---:|---:|---:|---:|
+| 60 s | **26% / 27%** | 21% / 23% | 743 / 766 kB | 871 / 897 kB (1.2×) |
+| 240 s | **16% / 17%** | 13% / 15% | 1516 / 1541 kB | 2181 / 2183 kB (1.4×) |
+| 600 s | **7.5% / 9.5%** | 6.2% / 8.3% | 2777 / 2768 kB | 4461 / 4456 kB (1.6×) |
+
+*hospital / city, twenty seeds.*
+
+**Syncing harder is worse on both axes.** It removes *fewer* encoder inferences
+than the bounded protocol — 21% against 26% at 60 seconds, and growth 1 → 16
+edge routers of +16% against +9% — while sending 1.2× to 1.6× the bytes. The
+reason is that neither is limited by how fast a mapping can reach everyone.
+Anti-entropy at fanout 2 already reaches N routers in O(log N) rounds, so
+raising the fanout mostly buys redundant deliveries, and lifting the delta cap
+lets a single exchange carry history the peer will discard. What limits the
+saving is how many *distinct* wordings the network has yet to see, which no
+amount of sync changes.
+
+That is the honest form of the answer to "why not just announce the prefix":
+not that sync would fail, but that the sharing benefit saturates early, so the
+part of the design doing the work is *what* is shared and *when* — a mapping,
+only once a Data packet has proven it — rather than how aggressively. It also
+means an implementation over PSync or SVS is a reasonable engineering choice
+this work does not argue against, and did not test.
+
 So the scope of this result is: **sharing pays a network that is large and still
 learning its catalog, and pays progressively less as it settles.** The regimes
 where it earns its cost are the ones a static 60-second measurement flatters —
@@ -517,9 +559,9 @@ against names clients actually request:
 
 | compromised | 0% | 12.5% | 25% | 50% |
 |---|---:|---:|---:|---:|
-| GS-NDN satisfaction | 0.940 | 0.832 | 0.783 | 0.747 |
+| GS-NDN satisfaction | 0.940 | 0.832 | 0.783 | 0.745 |
 | Risk-controlled satisfaction | 0.919 | 0.822 | 0.780 | 0.754 |
-| GS-NDN realised error | 0.027 | 0.103 | 0.142 | 0.165 |
+| GS-NDN realised error | 0.027 | 0.103 | 0.142 | 0.168 |
 | Risk-controlled realised error | 0.014 | 0.105 | 0.151 | 0.170 |
 
 **Degradation is graceful, not prevented.** Against a persistent attacker,
