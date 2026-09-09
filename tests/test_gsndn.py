@@ -537,3 +537,49 @@ def test_results_are_reproducible_for_a_fixed_seed():
     second = run_once(config).metrics
     for key in ("isr", "precision", "encoder_runs", "irt_mean_ms"):
         assert first[key] == pytest.approx(second[key])
+
+
+def test_reproducible_across_interpreter_hash_seeds():
+    """The same seed must give the same numbers in a *different process*.
+
+    Two things broke this and neither showed up in the same-process test above,
+    because both depend on the hash salt Python picks per interpreter: the
+    gossip digest was folded from ``hash()`` over strings, and PIT in-faces were
+    iterated as a set, which set the order replies went out and so the order
+    events entered the queue. Same-seed runs then drifted by about 0.03% in the
+    gossip counters between processes -- small, but it meant nobody re-running
+    the campaign could reproduce the numbers in RESULTS.md exactly.
+
+    Running the child with an explicit differing PYTHONHASHSEED is the point:
+    the failure is invisible unless the salt actually differs.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+
+    script = (
+        "import json, sys;"
+        "sys.path.insert(0, %r);"
+        "from gsndn.runner import ScenarioConfig, run_once;"
+        "from gsndn.workload import WorkloadConfig;"
+        "c = ScenarioConfig(strategy='gs-ndn', n_edges=4,"
+        " workload=WorkloadConfig(rate_per_s=100, duration_ms=6000, seed=23));"
+        "m = run_once(c).metrics;"
+        "print(json.dumps({k: m[k] for k in"
+        " ('isr', 'encoder_runs', 'gossip_mappings_applied', 'es_imported_total')}))"
+    ) % str(ROOT)
+
+    runs = []
+    for hash_seed in ("0", "12345"):
+        env = dict(os.environ, PYTHONHASHSEED=hash_seed)
+        out = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, env=env, check=True,
+        )
+        runs.append(json.loads(out.stdout))
+
+    assert runs[0] == runs[1], (
+        "same seed, different interpreter hash salt, different numbers: "
+        f"{runs[0]} vs {runs[1]}"
+    )

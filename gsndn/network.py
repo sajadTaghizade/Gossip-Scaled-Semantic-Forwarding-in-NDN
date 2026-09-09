@@ -247,7 +247,7 @@ class Router(Node):
                 self.strategy.on_confirmed(self, entry.pending_learn, self.sim.now)
             # Stamp each copy with exactly the Interests its own entry folded.
             outgoing = replace(data, satisfied_ids=tuple(entry.interest_ids))
-            for face_id in entry.in_faces:
+            for face_id in sorted(entry.in_faces):
                 self._send(outgoing, face_id)
 
     def _entries_resolving_to(self, canonical: str) -> List:
@@ -271,7 +271,7 @@ class Router(Node):
                 # route depends on why -- see the refusal reasons in packets.py.
                 self.strategy.on_rejected(self, entry.pending_learn, nack.reason)
             outgoing = replace(nack, satisfied_ids=tuple(entry.interest_ids))
-            for face_id in entry.in_faces:
+            for face_id in sorted(entry.in_faces):
                 self._send(outgoing, face_id)
 
 

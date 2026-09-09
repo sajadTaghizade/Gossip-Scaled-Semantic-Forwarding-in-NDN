@@ -31,6 +31,7 @@ makes a continuous background exchange affordable.
 from __future__ import annotations
 
 import random
+import zlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -156,12 +157,23 @@ class GossipAgent:
         Comparing this pair is enough to skip an exchange between two routers
         that already agree, which is the common case once the network has
         converged and is why steady-state overhead stays flat.
+
+        The fold is CRC-32 over an explicit encoding, not Python's ``hash``.
+        ``hash`` on a tuple of strings is salted per interpreter process, so a
+        digest built from it takes a different value in every run: two routers
+        holding different sets would collide -- and skip an exchange they should
+        have made -- on some runs and not others. That leaked into the gossip
+        counters as roughly a 0.03% drift between processes at a fixed seed,
+        with outcome metrics unaffected, and it made those counters
+        irreproducible for anyone re-running the campaign. XOR-folding keeps the
+        digest order-independent, which is the property that matters here.
         """
         if not self.known:
             return 0, 0
         folded = 0
         for mapping in self.known.values():
-            folded ^= hash((mapping.variant, mapping.canonical, mapping.version))
+            payload = f"{mapping.variant}\x00{mapping.canonical}\x00{mapping.version}"
+            folded ^= zlib.crc32(payload.encode("utf-8"))
         return len(self.known), folded & 0xFFFFFFFF
 
     def publish(self, entry: EsEntry) -> Mapping:
