@@ -275,9 +275,10 @@ python experiments/make_figures.py
 
 `--jobs N` runs N seeded runs in parallel; `--jobs 0` uses one worker per core.
 Output is reassembled in submission order and every run is a pure function of
-its own seeded config, so results are identical to `--jobs 1` -- verified at
-both the `Bench` level and the CLI level before the flag was documented.
-Measured speedup on four workers: 3.05x.
+its own seeded config, so results are identical to `--jobs 1`. Verified twice
+before the flag was documented: per-seed metrics identical at the `Bench`
+level, and `ablation.json` byte-identical between `--jobs 1` and `--jobs 4` at
+the CLI level. Measured speedup on four workers: 3.05x.
 
 `make_figures.py` now draws `fig_robust` and `fig_vocabulary` alongside the
 existing eight.
