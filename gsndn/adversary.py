@@ -14,6 +14,16 @@ survives one round trip per victim. Without verification nothing stops it, which
 is the concrete reason confirmation matters even though the static-network
 ablation showed it costing more than it saved.
 
+That paragraph described the design and, until the defect recorded in
+:meth:`gsndn.strategies.semantic.GsNdn._pending_for_imported` was found, not the
+code: a mapping learned from a peer carried no pending verification, so no
+producer verdict was ever attributed to it and *no poisoned mapping was ever
+retracted* -- 608 injected, 897 gossip hits served from them, zero retractions.
+It is true now, and ``gs-ndn-unverified-import`` keeps the old behaviour
+available so the difference stays measurable. Note what that implies about the
+ablation: the static-network comparison that found verification costing more
+than it saved was measuring only locally resolved mappings.
+
 **Poisoned evidence** is quieter and, it turns out, more dangerous. Fabricated
 "this score worked" observations pull a route's boundary *down*, so the victim
 starts accepting resolutions it would have refused. No single decision looks
@@ -124,7 +134,15 @@ class Adversary:
     def _tick(self) -> None:
         if not self._running or self.gossip is None:
             return
-        for router_id in self.compromised:
+        # Sorted, not set order. The same defect commit "Make runs reproducible
+        # across processes" fixed in the gossip digest and the PIT in-face list
+        # survived here: ``compromised`` is a set of router ids, and iterating it
+        # fixes the order the attacker injects in, which fixes the order those
+        # events enter the queue. Unlike the earlier two this one moves an
+        # outcome metric -- ISR differs by about 0.006 between interpreter hash
+        # salts at a fixed seed -- so section 9's numbers were not reproducible
+        # by anyone re-running the campaign in a fresh process.
+        for router_id in sorted(self.compromised):
             agent = self.gossip.agents.get(router_id)
             if agent is not None:
                 self._inject_mappings(agent)

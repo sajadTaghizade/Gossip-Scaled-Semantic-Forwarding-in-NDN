@@ -37,6 +37,17 @@ STRATEGIES = (
     # rc-ndn respectively, so the effect is attributable.
     "gs-ndn-reasons",
     "rc-ndn-reasons",
+    # Verification-grounded peer reputation: the defence section 9 names as
+    # missing. One variable against gs-ndn and rc-ndn respectively.
+    "gs-ndn-robust",
+    "rc-ndn-robust",
+    # The import-verification defect, restored. Until it was found, a mapping
+    # learned from a peer was never checked against a producer no matter how
+    # often it was used, so GS-NDN's verification claim held only for the
+    # mappings a router resolved itself. This arm is that behaviour, kept so the
+    # defect's cost stays measurable and so results published before the fix can
+    # be reproduced on demand.
+    "gs-ndn-unverified-import",
 )
 
 
@@ -81,6 +92,21 @@ def build_strategy(
             explore_rate=explore_rate, reason_aware=True,
         )
         strategy.name = "rc-ndn-reasons"
+        return strategy
+    if name == "gs-ndn-unverified-import":
+        strategy = GsNdn(threshold, costs, verify_imported=False)
+        strategy.name = "gs-ndn-unverified-import"
+        return strategy
+    if name == "gs-ndn-robust":
+        strategy = GsNdn(threshold, costs, robust=True, verify_imported=True)
+        strategy.name = "gs-ndn-robust"
+        return strategy
+    if name == "rc-ndn-robust":
+        strategy = RiskControlledNdn(
+            threshold, costs, epsilon=epsilon, confidence=confidence,
+            explore_rate=explore_rate, robust=True, verify_imported=True,
+        )
+        strategy.name = "rc-ndn-robust"
         return strategy
     if name == "rc-ndn-aci":
         # Adaptive Conformal Inference: the budget itself moves in response to

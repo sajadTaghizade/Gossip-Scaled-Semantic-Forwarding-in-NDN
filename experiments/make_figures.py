@@ -40,10 +40,16 @@ PALETTE = {
     "gs-ndn-anti-entropy-only": "#e34948",
     "gs-ndn-slow-gossip": "#008300",
     "sef": "#008300",
+    "gs-ndn-robust": "#6a1b9a",
+    "gs-ndn-unverified-import": "#b07b2f",
+    "rc-ndn": "#00707a",
+    "rc-ndn-robust": "#4a148c",
 }
 MARKERS = {
     "vanilla-ndn": "o", "saf": "s", "saf+es": "^", "gs-ndn": "D",
     "gs-ndn-no-gossip": "v", "gs-ndn-no-verify": "P",    "gs-ndn-anti-entropy-only": "X", "gs-ndn-slow-gossip": "*", "sef": "*",
+    "gs-ndn-robust": "h", "gs-ndn-unverified-import": "<",
+    "rc-ndn": ">", "rc-ndn-robust": "p",
 }
 DASHES = {
     "vanilla-ndn": (None, None), "saf": (5, 2), "saf+es": (2, 1.5),
@@ -51,6 +57,8 @@ DASHES = {
     "gs-ndn-no-verify": (1, 1), "gs-ndn-anti-entropy-only": (6, 2, 1, 2),
     "gs-ndn-slow-gossip": (3, 3),
     "sef": (3, 3),
+    "gs-ndn-robust": (None, None), "gs-ndn-unverified-import": (2, 2, 6, 2),
+    "rc-ndn": (5, 1, 1, 1), "rc-ndn-robust": (None, None),
 }
 LABELS = {
     "vanilla-ndn": "Vanilla NDN", "saf": "SAF", "saf+es": "SAF+ES",
@@ -59,6 +67,9 @@ LABELS = {
     "gs-ndn-anti-entropy-only": "GS-NDN, anti-entropy only",
     "gs-ndn-slow-gossip": "GS-NDN, 5 s gossip period",
     "sef": "SEF",
+    "gs-ndn-robust": "GS-NDN + reputation (ours)",
+    "gs-ndn-unverified-import": "GS-NDN, imports unverified",
+    "rc-ndn": "RC-NDN", "rc-ndn-robust": "RC-NDN + reputation",
 }
 
 TEXT_PRIMARY = "#0b0b0b"
@@ -373,6 +384,96 @@ def fig_simhash(detail: dict, out: Path) -> None:
     save(fig, out, "fig_simhash")
 
 
+def fig_robust(data: dict, out: Path) -> None:
+    """What peer reputation recovers from a persistent poisoning attacker.
+
+    Two panels per domain rather than one, because satisfaction alone would hide
+    the half of the result that matters to a guarantee: the error budget is only
+    meaningful if the realised error stays inside it, and §9's attack is an
+    attack on exactly that. The left panel is what the operator feels, the right
+    is whether the budget still holds.
+    """
+    print("  robust")
+    domains = list(data)
+    arms = ["gs-ndn-unverified-import", "gs-ndn", "gs-ndn-robust"]
+    fig, axes = plt.subplots(
+        2, len(domains), figsize=(4.6 * len(domains), 6.0), squeeze=False
+    )
+    for column, domain in enumerate(domains):
+        rows = data[domain]
+        for metric, ax, label in (
+            ("isr", axes[0][column], "satisfaction (ISR)"),
+            ("risk_realised_error", axes[1][column], "realised error"),
+        ):
+            for arm in arms:
+                if arm not in rows:
+                    continue
+                xs, means, errors = _xy(rows[arm], metric)
+                series(ax, [x * 100 for x in xs], means, errors, arm)
+            ax.set_xlabel("compromised routers (%)")
+            ax.set_ylabel(label)
+            tidy(ax)
+        axes[0][column].set_title(domain)
+        axes[0][column].legend(loc="lower left")
+    fig.suptitle(
+        "Verification-grounded reputation under a persistent poisoning attacker",
+        fontsize=10.5, fontweight="bold", y=0.98,
+    )
+    fig.tight_layout()
+    save(fig, out, "fig_robust")
+
+
+def fig_vocabulary(data: dict, out: Path) -> None:
+    """Why the sharing win decays: the catalog runs out, not the protocol.
+
+    One line per vocabulary arrival rate, each showing gossip's encoder saving
+    against ``saf+es`` as the horizon lengthens. The closed catalog is the
+    fastest-decaying line and also the highest one, which is the whole finding:
+    the saving tracks the *backlog* of resolutions the network has not yet
+    shared, and a closed catalog at t=0 is the largest backlog obtainable.
+    """
+    print("  vocabulary")
+    domains = list(data)
+    fig, axes = plt.subplots(
+        1, len(domains), figsize=(4.8 * len(domains), 3.4), squeeze=False
+    )
+    shades = ["#1b3a6b", "#2f6fb0", "#6fa8dc", "#a8c8e8"]
+    for ax, domain in zip(axes[0], domains):
+        arrivals = sorted(data[domain], key=float)
+        for index, arrival in enumerate(arrivals):
+            per_horizon = data[domain][arrival]
+            horizons = sorted(per_horizon, key=float)
+            xs, savings = [], []
+            for horizon in horizons:
+                pair = per_horizon[horizon]
+                es = pair["saf+es"]["encoder_runs"]["mean"]
+                gs = pair["gs-ndn"]["encoder_runs"]["mean"]
+                if not es:
+                    continue
+                xs.append(float(horizon) / 1000.0)
+                savings.append((es - gs) / es * 100.0)
+            label = (
+                "closed catalog" if float(arrival) == 0.0
+                else f"new wording every {float(arrival):g} s"
+            )
+            ax.plot(
+                xs, savings, marker="os^D"[index % 4],
+                color=shades[index % len(shades)], label=label,
+                markeredgecolor="white", markeredgewidth=0.8,
+            )
+        ax.axhline(0.0, color=TEXT_SECONDARY, linewidth=0.8, linestyle=":")
+        ax.set_xlabel("run length (s)")
+        ax.set_ylabel("encoder inferences saved by gossip (%)")
+        ax.set_title(domain)
+        ax.legend(loc="upper right")
+        tidy(ax)
+    fig.suptitle(
+        "The sharing win tracks unshared vocabulary, not run length",
+        fontsize=10.5, fontweight="bold", y=1.02,
+    )
+    save(fig, out, "fig_vocabulary")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     root = Path(__file__).resolve().parents[1]
@@ -387,6 +488,7 @@ def main() -> int:
         ("main", fig_main), ("threshold", fig_threshold), ("rate", fig_rate),
         ("scaling", fig_scaling), ("convergence", fig_convergence),
         ("ablation", fig_ablation), ("energy", fig_energy),
+        ("robust", fig_robust), ("vocabulary", fig_vocabulary),
     ):
         payload = load(args.results, name)
         if payload:

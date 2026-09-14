@@ -94,11 +94,13 @@ class GossipStats:
     mappings_sent: int = 0
     mappings_applied: int = 0
     mappings_redundant: int = 0
+    mappings_rejected_untrusted: int = 0
     conflicts_resolved: int = 0
     bytes_sent: int = 0
     rumours_pushed: int = 0
     evidence_sent: int = 0
     evidence_applied: int = 0
+    evidence_rejected_untrusted: int = 0
     evidence_dropped_encoder: int = 0
     evidence_mixed_encoder: int = 0
     evidence_bytes: int = 0
@@ -110,6 +112,7 @@ class GossipStats:
             "gossip_mappings_sent": self.mappings_sent,
             "gossip_mappings_applied": self.mappings_applied,
             "gossip_mappings_redundant": self.mappings_redundant,
+            "gossip_mappings_rejected_untrusted": self.mappings_rejected_untrusted,
             "gossip_conflicts_resolved": self.conflicts_resolved,
             "gossip_bytes": self.bytes_sent,
             "gossip_rumours": self.rumours_pushed,
@@ -118,6 +121,7 @@ class GossipStats:
             ),
             "gossip_evidence_sent": self.evidence_sent,
             "gossip_evidence_applied": self.evidence_applied,
+            "gossip_evidence_rejected_untrusted": self.evidence_rejected_untrusted,
             "gossip_evidence_dropped_encoder": self.evidence_dropped_encoder,
             "gossip_evidence_mixed_encoder": self.evidence_mixed_encoder,
             "gossip_evidence_bytes": self.evidence_bytes,
@@ -129,6 +133,20 @@ def _encoder_id(router: "Router") -> str:
     index = getattr(router, "name_index", None)
     backend = getattr(index, "backend", None)
     return getattr(backend, "id", "unknown")
+
+
+def _reputation_for(router: "Router"):
+    """This router's peer-reputation table, or ``None`` when not in use.
+
+    Asked of the strategy rather than the router for the same reason the
+    encoder guard is: reputation is policy. A strategy that does not implement
+    it returns nothing and every path here behaves exactly as it did before the
+    defence existed, which is what keeps the robust arm a one-variable change
+    against its own baseline.
+    """
+    strategy = getattr(router, "strategy", None)
+    getter = getattr(strategy, "reputation_for", None)
+    return getter(router) if getter is not None else None
 
 
 class GossipAgent:
@@ -215,6 +233,7 @@ class GossipAgent:
         routers from oscillating between conflicting answers.
         """
         applied = 0
+        reputation = _reputation_for(self.router)
         for mapping in mappings:
             existing = self.known.get(mapping.variant)
             if existing is not None and existing.version >= mapping.version:
@@ -224,6 +243,16 @@ class GossipAgent:
             local = self.router.es.peek(mapping.variant)
             if local is not None and local.source == "local" and local.confirmed:
                 stats.conflicts_resolved += 1
+                continue
+
+            # Has this peer earned belief, and has this router already disproved
+            # exactly this claim? Without the second test a pair refuted
+            # first-hand is reinstalled by the next gossip round, which is what
+            # lets §9's re-injecting attacker defeat one-shot retraction.
+            if reputation is not None and not reputation.admits_mapping(
+                mapping.origin, mapping.variant, mapping.canonical
+            ):
+                stats.mappings_rejected_untrusted += 1
                 continue
 
             face = self._face_for(mapping.canonical)
@@ -364,15 +393,32 @@ class GossipProtocol:
         if controller is None:
             return
         cost = self.apply_cost_ms * len(batch.observations)
+        reputation = _reputation_for(router)
 
         def apply() -> None:
-            taken = controller.absorb(
-                batch.prefix,
-                [
-                    Observation(o.score, o.correct, o.at_ms, source=batch.origin)
-                    for o in batch.observations
-                ],
-            )
+            observations = [
+                Observation(o.score, o.correct, o.at_ms, source=batch.origin)
+                for o in batch.observations
+            ]
+            if reputation is not None:
+                # An observation about a route is not immediately falsifiable
+                # the way a mapping is, so this channel gets the statistical
+                # defence rather than the detection one: a cap on how much of
+                # the window behind a boundary any single peer may own.
+                allowed = []
+                held = controller.held_from(batch.prefix, batch.origin)
+                for observation in observations:
+                    if not reputation.admits_evidence(
+                        batch.origin, held, controller.window
+                    ):
+                        self.stats.evidence_rejected_untrusted += 1
+                        continue
+                    held += 1
+                    allowed.append(observation)
+                observations = allowed
+            if not observations:
+                return
+            taken = controller.absorb(batch.prefix, observations)
             self.stats.evidence_applied += taken
 
         router.cpu.submit(lambda: (cost, apply))

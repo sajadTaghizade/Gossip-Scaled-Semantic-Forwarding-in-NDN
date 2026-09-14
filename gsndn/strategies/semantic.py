@@ -53,6 +53,7 @@ from ..packets import (
     OUTCOME_TAGGED,
     SemanticTag,
 )
+from ..reputation import DEFAULT_FLOOR, DEFAULT_PEER_SHARE, ReputationTable
 from ..tables import EsEntry, PendingMapping
 from .base import ForwardingStrategy
 
@@ -205,10 +206,27 @@ class GsNdn(Saf):
         verify: bool = True,
         gossip: bool = True,
         reason_aware: bool = False,
+        robust: bool = False,
+        verify_imported: bool = True,
+        trust_floor: float = DEFAULT_FLOOR,
+        peer_share: float = DEFAULT_PEER_SHARE,
     ) -> None:
         super().__init__(threshold, costs)
         #: Retract mappings a Nack disproves, and only gossip proven ones.
         self.verify = verify
+        #: Attribute every retraction to whoever supplied the claim, and stop
+        #: believing peers that keep being wrong. Off by default: every result
+        #: published before this existed was measured with it off.
+        self.robust = robust
+        #: Check a peer's mapping against a producer the first time this router
+        #: uses it. See :meth:`_pending_for_imported` for what its absence cost.
+        self.verify_imported = verify_imported
+        self.imported_confirmed = 0
+        self.imported_retracted = 0
+        self.reputations: Dict[str, ReputationTable] = {}
+        self._reputation_defaults = dict(
+            floor=trust_floor, confidence=0.9, peer_share=peer_share
+        )
         #: Read the producer's refusal reason instead of treating every refusal
         #: as a refutation. Off by default, because every result published
         #: before this existed was measured with it off.
@@ -250,6 +268,7 @@ class GsNdn(Saf):
                 outcome=outcome, canonical=cached.canonical, face=cached.face,
                 score=cached.score, cpu_ms=self.costs.es_lookup_ms,
                 tag=SemanticTag(cached.canonical, cached.score, router.id),
+                learn=self._pending_for_imported(cached),
             )
 
         # 3. Nothing known, so this router pays to find out. In practice that is
@@ -292,18 +311,94 @@ class GsNdn(Saf):
             learn=mapping if self.verify else None,
         )
 
+    def reputation_for(self, router: "Router") -> Optional[ReputationTable]:
+        """This router's peer table. ``None`` disables every robust path."""
+        if not self.robust:
+            return None
+        table = self.reputations.get(router.id)
+        if table is None:
+            table = ReputationTable(**self._reputation_defaults)
+            self.reputations[router.id] = table
+        return table
+
     def on_confirmed(self, router: "Router", mapping: PendingMapping, now: float) -> None:
         super().on_confirmed(router, mapping, now)
+        # Who told us this, before confirming clears the question. A mapping
+        # that came from a neighbour and then worked is that neighbour's credit:
+        # the producer just audited it for us, at no cost we were not already
+        # paying.
+        taught_by = self._taught_by(router, mapping.variant)
+        held = router.es.peek(mapping.variant)
         entry = router.es.confirm(mapping.variant, now)
+        reputation = self.reputation_for(router)
+        if taught_by is not None:
+            # An imported mapping this router has now seen work. It is not
+            # re-published: it is already travelling from whoever proved it
+            # first, and echoing it back would turn one confirmation into a
+            # broadcast storm proportional to how popular the wording is.
+            if held is not None and not held.locally_verified:
+                held.locally_verified = True
+                self.imported_confirmed += 1
+            if reputation is not None:
+                reputation.credit(taught_by)
         # Proven locally, so now it is worth telling the neighbours. This is the
         # only path by which a mapping enters the gossip layer.
         if entry is not None and self.gossip and router.gossip_protocol is not None:
             router.gossip_protocol.on_confirmed(router, entry)
 
+    def _pending_for_imported(self, cached: EsEntry) -> Optional[PendingMapping]:
+        """Make a peer's mapping falsifiable the first time this router uses it.
+
+        Without this the verification GS-NDN is built on never runs on anything
+        gossip taught us. A cache hit returned no pending mapping, so the PIT
+        entry carried nothing to judge, so neither ``on_confirmed`` nor
+        ``on_rejected`` fired -- and a mapping a neighbour asserted was never
+        checked against a producer no matter how many times it was used.
+
+        On an honest network that is invisible, because the only mappings in
+        circulation are ones somebody did verify. Under §9's attacker it is the
+        whole game: every poisoned mapping is imported, so none of them was ever
+        retracted. Measured directly before this existed -- 608 fabricated
+        mappings injected, 897 gossip hits served from them, and
+        ``adv_poison_retracted`` exactly zero for the entire run. The claim in
+        :mod:`gsndn.adversary` that "the lie survives one round trip per victim"
+        described the design and not the code; the lie survived the run.
+
+        **On by default since the defect was found.** GS-NDN's first claim is
+        that a mapping is verified before it is trusted; leaving this off would
+        mean shipping a system where that claim holds for locally resolved
+        mappings and silently fails for every mapping the network shared, which
+        is the half the design is actually about.
+
+        ``gs-ndn-unverified-import`` restores the old behaviour and changes
+        nothing else, so the cost of the defect stays measurable and every
+        number published before the fix can still be reproduced on demand.
+        """
+        if not (self.verify and self.verify_imported):
+            return None
+        if cached.source == "local" or cached.locally_verified:
+            return None
+        return PendingMapping(
+            variant=cached.variant, canonical=cached.canonical,
+            face=cached.face, score=cached.score,
+        )
+
+    @staticmethod
+    def _taught_by(router: "Router", variant: str) -> Optional[str]:
+        """The neighbour a held mapping came from, or ``None`` if first-hand."""
+        entry = router.es.peek(variant)
+        if entry is None or entry.source == "local":
+            return None
+        return entry.source
+
     def on_rejected(
         self, router: "Router", mapping: PendingMapping, reason: str = "",
     ) -> None:
         super().on_rejected(router, mapping, reason)
+        # Attribute the refusal before dropping the entry destroys the evidence
+        # of where the claim came from.
+        taught_by = self._taught_by(router, mapping.variant)
+        reputation = self.reputation_for(router)
         # A refusal means this wording did not get served, so the mapping goes
         # either way: keeping it would send the next copy of this wording to the
         # same refusal. What the reason decides is whether the *route* is also
@@ -311,6 +406,19 @@ class GsNdn(Saf):
         router.es.drop(mapping.variant)
         if not self.verify:
             return
+        if reputation is not None and not (
+            self.reason_aware and reason == REFUSAL_UNKNOWN_WORDING
+        ):
+            # A wording the producer never declared is not evidence against the
+            # peer that taught us the route -- the route was right. Debiting a
+            # neighbour for it would make an incomplete declaration look like
+            # a compromised peer, which is §16's bias arriving in the defence.
+            if taught_by is not None:
+                reputation.debit(taught_by, mapping.variant, mapping.canonical)
+            else:
+                reputation.note_refuted(mapping.variant, mapping.canonical)
+        if taught_by is not None:
+            self.imported_retracted += 1
         if self.reason_aware and reason == REFUSAL_UNKNOWN_WORDING:
             # The producer publishes this name -- the route was right, and only
             # the phrasing was outside what it declared. Blacklisting the prefix
@@ -332,8 +440,22 @@ class GsNdn(Saf):
             "reresolutions": self.reresolutions,
             "recoveries": self.recoveries,
             "wording_refusals": self.wording_refusals,
+            "imported_confirmed": self.imported_confirmed,
+            "imported_retracted": self.imported_retracted,
             "refuted_pairs": sum(
                 len(v) for per_router in self.refuted.values() for v in per_router.values()
             ),
         })
+        if self.reputations:
+            # Summed across routers, then averaged for the quantities that are
+            # rates rather than counts -- the same shape RiskControlledNdn uses
+            # so a sweep reports them comparably.
+            merged: Dict[str, float] = {}
+            for table in self.reputations.values():
+                for key, value in table.stats().items():
+                    merged[key] = merged.get(key, 0.0) + float(value)
+            count = len(self.reputations)
+            for key in ("rep_trust_mean", "rep_trust_min"):
+                merged[key] /= count
+            data.update(merged)
         return data

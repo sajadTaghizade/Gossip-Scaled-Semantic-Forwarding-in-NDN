@@ -47,6 +47,24 @@ class WorkloadConfig:
     #: 1.0 means every consumer asks about everything; 0.0 means disjoint slices.
     overlap: float = 0.5
 
+    #: Mean seconds between one new wording entering the network's vocabulary.
+    #:
+    #: Zero -- the default, and what every result published before this existed
+    #: used -- makes the whole catalog askable from t=0. That is a *closed*
+    #: vocabulary, and it is the hidden assumption behind section 2's horizon
+    #: result: once every router has met all 300 rewordings there is nothing
+    #: left for anyone to learn, so sharing necessarily stops paying and the
+    #: measured win decays toward zero. The decay is a property of the closed
+    #: catalog, not of the protocol.
+    #:
+    #: Above zero, wordings arrive over the run in a seeded order and a request
+    #: may only use one that has already arrived. This is the realistic case: a
+    #: deployment meets new phrasings as client applications, vendors and
+    #: integrations appear, and never finishes meeting them. The sweep over this
+    #: parameter is what turns "our advantage shrinks with run length" into a
+    #: statement about *what* it is proportional to.
+    vocabulary_arrival_s: float = 0.0
+
     seed: int = 0
 
 
@@ -110,6 +128,36 @@ def _consumer_slices(
     return slices
 
 
+def _vocabulary_arrivals(
+    catalog: NameCatalog, config: WorkloadConfig
+) -> Dict[str, float]:
+    """When each rewording first becomes askable, in milliseconds.
+
+    Empty when the vocabulary is closed, which is both the default and the
+    condition under which this function must not perturb anything.
+
+    The arrival order is drawn from its own generator rather than the trace's,
+    so switching arrivals on changes *which* wording a request uses and nothing
+    else -- same number of requests, same arrival times, same consumers, same
+    services. Without that separation the Poisson gaps drawn later in
+    :func:`generate` shift too, and an arrival sweep would be comparing traces
+    of different lengths against each other rather than the one variable.
+
+    Arrivals are evenly spaced rather than Poisson. The quantity under study is
+    the *rate* at which the network meets wordings it has not collectively
+    resolved, and spacing them evenly measures the response to that rate
+    without folding in the variance of a second arrival process.
+    """
+    if config.vocabulary_arrival_s <= 0.0:
+        return {}
+    names = [interest.name for interest in catalog.by_kind(VARIANT)]
+    if not names:
+        return {}
+    order = np.random.default_rng(config.seed + 90_210).permutation(len(names))
+    step_ms = config.vocabulary_arrival_s * 1000.0
+    return {names[int(idx)]: rank * step_ms for rank, idx in enumerate(order)}
+
+
 def generate(
     catalog: NameCatalog,
     consumers: Sequence[str],
@@ -128,6 +176,7 @@ def generate(
 
     weights = _popularity_weights(n_services, config)
     slices = _consumer_slices(n_services, len(consumers), config.overlap, rng)
+    arrival_at = _vocabulary_arrivals(catalog, config)
 
     # Poisson arrivals: exponential gaps at the aggregate rate.
     mean_gap_ms = 1000.0 / max(config.rate_per_s, 1e-9)
@@ -158,7 +207,16 @@ def generate(
         use_variant = rng.random() < config.variation_rate
         options = variants_by_service.get(service, [])
         if use_variant and options:
-            pick = options[int(rng.integers(len(options)))]
+            # The draw is taken over the full option list whether or not the
+            # vocabulary is gated, so that turning arrivals on shifts *which*
+            # wording is asked for without shifting the random stream underneath
+            # it. With arrivals off this reduces to the original line exactly.
+            index = int(rng.integers(len(options)))
+            live = (
+                [o for o in options if arrival_at.get(o.name, 0.0) <= at_ms]
+                if arrival_at else options
+            )
+            pick = live[index % len(live)] if live else exact_by_service[service]
         else:
             pick = exact_by_service[service]
 

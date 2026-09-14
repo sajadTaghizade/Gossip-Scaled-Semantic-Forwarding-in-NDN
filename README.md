@@ -215,8 +215,11 @@ gsndn/
                  plus grounded variants using Brick/SAREF/Haystack/SSN class names
   admission.py   what a producer knows about its own services
   risk.py        per-route boundaries from an error budget
-  strategies/    Vanilla NDN, SAF, SAF+ES, SEF, GS-NDN, RC-NDN and ablations
+  strategies/    Vanilla NDN, SAF, SAF+ES, SEF, GS-NDN, RC-NDN, the
+                 reputation-hardened arms, and ablations
   gossip.py      anti-entropy over verified mappings and calibration evidence
+  reputation.py  which neighbours have earned belief, audited from producer
+                 verdicts rather than from crypto or consensus
   churn.py       producers that depart, return, relocate and narrow their schema
   adversary.py   compromised routers, and how far their lies travel
   embeddings.py  MiniLM via ONNX, precomputed vectors, a lexical control

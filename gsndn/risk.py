@@ -344,6 +344,19 @@ class RiskController:
         else:
             self.observations_remote += 1
 
+    def held_from(self, prefix: str, source: str) -> int:
+        """How many of this route's live observations came from one source.
+
+        Read by the peer-influence cap in :mod:`gsndn.reputation`. The quantity
+        that corrupts a boundary is the *composition* of the window behind it,
+        so the cap has to be expressed over what the window currently holds
+        rather than over an arrival rate.
+        """
+        calibrator = self.routes.get(prefix)
+        if calibrator is None:
+            return 0
+        return sum(1 for o in calibrator.observations if o.source == source)
+
     def absorb(self, prefix: str, observations: Iterable[Observation]) -> int:
         """Take in evidence gathered elsewhere. Returns how much was used."""
         taken = 0

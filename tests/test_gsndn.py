@@ -583,3 +583,269 @@ def test_reproducible_across_interpreter_hash_seeds():
         "same seed, different interpreter hash salt, different numbers: "
         f"{runs[0]} vs {runs[1]}"
     )
+
+
+def test_adversary_is_reproducible_across_interpreter_hash_seeds():
+    """The poisoning arm must not depend on the interpreter's hash salt.
+
+    ``test_reproducible_across_interpreter_hash_seeds`` guards the honest path
+    and missed this one: ``Adversary.compromised`` is a set of router ids, and
+    iterating it fixed the order the attacker injected in, which fixed the order
+    those events entered the queue. Unlike the gossip-digest and PIT-in-face
+    defects that preceded it, this one moved ISR -- by about 0.006 at a fixed
+    seed -- so section 9 was not reproducible in a fresh process.
+
+    Verified by reverting the ``sorted`` in ``Adversary._tick``.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+
+    script = (
+        "import json, sys;"
+        "sys.path.insert(0, %r);"
+        "from gsndn.runner import ScenarioConfig, run_once;"
+        "from gsndn.workload import WorkloadConfig;"
+        "from gsndn.adversary import AdversaryConfig;"
+        "c = ScenarioConfig(strategy='gs-ndn', n_edges=8, threshold=0.6,"
+        " workload=WorkloadConfig(rate_per_s=150, duration_ms=20000, seed=5),"
+        " adversary=AdversaryConfig(compromised_share=0.25)).with_seed(5);"
+        "m = run_once(c).metrics;"
+        "print(json.dumps({k: m[k] for k in"
+        " ('isr', 'encoder_runs', 'adv_poison_live', 'gossip_mappings_applied')}))"
+    ) % str(ROOT)
+
+    runs = []
+    for hash_seed in ("0", "99"):
+        env = dict(os.environ, PYTHONHASHSEED=hash_seed)
+        out = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, env=env, check=True,
+        )
+        runs.append(json.loads(out.stdout))
+
+    assert runs[0] == runs[1], (
+        "same seed, different interpreter hash salt, different numbers under "
+        f"attack: {runs[0]} vs {runs[1]}"
+    )
+
+
+# --- peer reputation --------------------------------------------------------
+
+
+def test_a_fresh_peer_is_believed():
+    """Reputation must not break the bootstrap it is defending.
+
+    A router that distrusts every unaudited peer can never accept the first
+    mapping a neighbour teaches it, which is the whole value of gossip. The
+    prior is deliberately trusting and the cost of that is bounded and stated:
+    MIN_CLAIMS free lies per identity.
+    """
+    from gsndn.reputation import ReputationTable
+
+    table = ReputationTable()
+    assert table.trust("edge-1") == 1.0
+    assert table.admits_mapping("edge-1", "/a/temp", "/b/temperature")
+
+
+def test_a_peer_that_keeps_being_refuted_stops_being_believed():
+    from gsndn.reputation import MIN_CLAIMS, ReputationTable
+
+    table = ReputationTable()
+    for i in range(MIN_CLAIMS * 3):
+        table.debit("liar", f"/v{i}", f"/c{i}")
+    assert table.trust("liar") < table.floor
+    assert not table.admits_mapping("liar", "/fresh", "/route")
+    # An honest peer over the same window is untouched: the table has to
+    # separate peers, not simply become paranoid under attack.
+    for i in range(MIN_CLAIMS * 3):
+        table.credit("honest")
+    assert table.trust("honest") > table.floor
+    assert table.admits_mapping("honest", "/fresh", "/route")
+
+
+def test_trust_is_a_lower_bound_not_a_point_estimate():
+    """Three clean claims is not proof, for the same reason §6 uses Wilson."""
+    from gsndn.reputation import MIN_CLAIMS, ReputationTable
+
+    table = ReputationTable()
+    for _ in range(MIN_CLAIMS):
+        table.credit("lucky")
+    assert table.trust("lucky") < 1.0
+
+
+def test_a_pair_refuted_first_hand_is_not_reinstalled_from_gossip():
+    """The gap that let §9's re-injecting attacker defeat verification.
+
+    GsNdn already recorded refuted prefixes for its own encoder runs, but
+    GossipAgent.apply never consulted them, so a mapping the router had
+    personally disproved came straight back on the next anti-entropy round.
+    """
+    from gsndn.reputation import ReputationTable
+
+    table = ReputationTable()
+    assert table.admits_mapping("edge-2", "/hospital/temp", "/wrong/route")
+    table.note_refuted("/hospital/temp", "/wrong/route")
+    assert not table.admits_mapping("edge-2", "/hospital/temp", "/wrong/route")
+    # A different route for the same wording is still allowed: the refutation
+    # is about the pair, not about the name.
+    assert table.admits_mapping("edge-2", "/hospital/temp", "/right/route")
+
+
+def test_no_single_peer_may_own_the_calibration_window():
+    """The evidence channel's defence is arithmetic, not detection."""
+    from gsndn.reputation import ReputationTable
+
+    table = ReputationTable(peer_share=0.25)
+    window = 256
+    assert table.admits_evidence("peer-a", held_from_peer=0, window=window)
+    assert table.admits_evidence("peer-a", held_from_peer=63, window=window)
+    assert not table.admits_evidence("peer-a", held_from_peer=64, window=window)
+    assert table.evidence_blocked_capped == 1
+
+
+def test_held_from_counts_only_that_source():
+    controller = RiskController(epsilon=0.2, prior=0.6)
+    controller.observe("/route", Observation(0.8, True, 0.0, source="local"))
+    controller.observe("/route", Observation(0.8, True, 0.0, source="edge-3"))
+    controller.observe("/route", Observation(0.8, True, 0.0, source="edge-3"))
+    assert controller.held_from("/route", "edge-3") == 2
+    assert controller.held_from("/route", "local") == 1
+    assert controller.held_from("/absent", "edge-3") == 0
+
+
+@needs_bundle
+def test_the_robust_arm_changes_nothing_on_an_honest_network():
+    """The defence has to be free when there is nobody to defend against.
+
+    If reputation costs satisfaction on a clean network it cannot be left
+    switched on, and every result would need a caveat about which arm was
+    measured.
+    """
+    def isr(strategy):
+        config = ScenarioConfig(
+            strategy=strategy, n_edges=8, threshold=0.6,
+            workload=WorkloadConfig(rate_per_s=150, duration_ms=20_000, seed=11),
+        ).with_seed(11)
+        return run_once(config).metrics["isr"]
+
+    assert isr("gs-ndn-robust") == pytest.approx(isr("gs-ndn"), abs=0.01)
+
+
+# --- open vocabulary --------------------------------------------------------
+
+
+def test_a_closed_vocabulary_is_the_trace_that_was_always_generated():
+    """Switching arrivals off must reproduce every published trace exactly."""
+    catalog = datasets.load("hospital")
+    consumers = ["c0", "c1", "c2", "c3"]
+    config = WorkloadConfig(rate_per_s=150, duration_ms=30_000, seed=3)
+    closed = generate(catalog, consumers, config)
+    explicit = generate(
+        catalog, consumers,
+        WorkloadConfig(rate_per_s=150, duration_ms=30_000, seed=3,
+                       vocabulary_arrival_s=0.0),
+    )
+    assert [(r.at_ms, r.consumer, r.name) for r in closed.requests] == [
+        (r.at_ms, r.consumer, r.name) for r in explicit.requests
+    ]
+
+
+def test_arrivals_change_which_wording_is_asked_and_nothing_else():
+    """The sweep is only a controlled comparison if the trace is paired.
+
+    An earlier version drew the arrival order from the trace's own generator,
+    which shifted the Poisson gaps drawn afterwards -- so turning arrivals on
+    changed the number of requests too, and the comparison had two variables.
+    """
+    catalog = datasets.load("hospital")
+    consumers = ["c0", "c1", "c2", "c3"]
+    kw = dict(rate_per_s=150, duration_ms=60_000, seed=3)
+    closed = generate(catalog, consumers, WorkloadConfig(**kw))
+    open_ = generate(catalog, consumers, WorkloadConfig(vocabulary_arrival_s=2.0, **kw))
+
+    assert len(closed.requests) == len(open_.requests)
+    assert [r.at_ms for r in closed.requests] == [r.at_ms for r in open_.requests]
+    assert [r.consumer for r in closed.requests] == [r.consumer for r in open_.requests]
+    # ... and it has to actually restrict something, or the knob does nothing.
+    assert open_.summary()["distinct_names"] < closed.summary()["distinct_names"]
+
+
+def test_a_wording_is_never_asked_for_before_it_arrives():
+    from gsndn.workload import _vocabulary_arrivals
+
+    catalog = datasets.load("hospital")
+    config = WorkloadConfig(rate_per_s=150, duration_ms=60_000, seed=3,
+                            vocabulary_arrival_s=2.0)
+    arrivals = _vocabulary_arrivals(catalog, config)
+    workload = generate(catalog, ["c0", "c1", "c2", "c3"], config)
+    early = [
+        r for r in workload.requests
+        if r.kind == VARIANT and r.at_ms < arrivals.get(r.name, 0.0)
+    ]
+    assert not early, f"{len(early)} requests used a wording that had not arrived"
+
+
+def test_verification_reaches_imported_mappings_by_default():
+    """GS-NDN's first claim has to hold on the path the design is about.
+
+    Until this defect was found, a mapping learned from a peer was never checked
+    against a producer however often it was used, so "verify before you trust"
+    held only for mappings a router resolved itself. Pinning the default here
+    stops that regressing silently.
+    """
+    from gsndn.strategies import build_strategy
+
+    assert build_strategy("gs-ndn").verify_imported is True
+    assert build_strategy("rc-ndn").verify_imported is True
+    assert build_strategy("gs-ndn-robust").verify_imported is True
+    # ... and the old behaviour stays reachable, so the defect's cost stays
+    # measurable and pre-fix results can still be reproduced.
+    assert build_strategy("gs-ndn-unverified-import").verify_imported is False
+
+
+@needs_bundle
+def test_imported_poison_is_retracted_now_that_imports_are_verified():
+    """The measurement that exposed the defect, as a regression test.
+
+    Before the fix: 608 fabricated mappings injected, 897 gossip hits served
+    from them, and ``adv_poison_retracted`` exactly zero for the whole run.
+    """
+    from gsndn.adversary import AdversaryConfig
+
+    def retracted(strategy):
+        config = ScenarioConfig(
+            strategy=strategy, n_edges=8, threshold=0.6,
+            workload=WorkloadConfig(rate_per_s=150, duration_ms=30_000, seed=5),
+            adversary=AdversaryConfig(compromised_share=0.25),
+        ).with_seed(5)
+        return run_once(config).metrics["imported_retracted"]
+
+    assert retracted("gs-ndn-unverified-import") == 0
+    assert retracted("gs-ndn") > 0
+
+
+@needs_bundle
+def test_every_verifying_arm_checks_its_imported_mappings():
+    """RiskControlledNdn overrides resolve(), so it can miss the check.
+
+    It did: when imports first became verifiable, gs-ndn-robust retracted
+    poisoned mappings and distrusted peers while rc-ndn-robust retracted none
+    and distrusted nobody, because the cached branch in the subclass had not
+    been given the same treatment. Parameterised so a future strategy that
+    overrides resolve() is caught by the same test.
+    """
+    from gsndn.adversary import AdversaryConfig
+
+    for strategy in ("gs-ndn", "gs-ndn-robust", "rc-ndn", "rc-ndn-robust"):
+        config = ScenarioConfig(
+            strategy=strategy, n_edges=8, threshold=0.6, epsilon=0.2,
+            workload=WorkloadConfig(rate_per_s=150, duration_ms=20_000, seed=5),
+            adversary=AdversaryConfig(compromised_share=0.25),
+        ).with_seed(5)
+        metrics = run_once(config).metrics
+        assert metrics["imported_retracted"] > 0, (
+            f"{strategy} never retracted an imported mapping under attack, "
+            "so its verification is not reaching the gossip path"
+        )

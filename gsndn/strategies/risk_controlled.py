@@ -69,13 +69,16 @@ class RiskControlledNdn(GsNdn):
         adapt_rate: float = 0.05,
         mix_across_encoders: bool = False,
         reason_aware: bool = False,
+        robust: bool = False,
+        verify_imported: bool = True,
     ) -> None:
         # The threshold survives only as the prior for routes with no evidence,
         # which is what makes this strictly a superset of the fixed-threshold
         # behaviour rather than a different system.
         super().__init__(
             threshold, costs, verify=verify, gossip=gossip,
-            reason_aware=reason_aware,
+            reason_aware=reason_aware, robust=robust,
+            verify_imported=verify_imported,
         )
         self.epsilon = epsilon
         #: Whether calibration observations travel between routers. Off for the
@@ -128,6 +131,12 @@ class RiskControlledNdn(GsNdn):
                 outcome=outcome, canonical=cached.canonical, face=cached.face,
                 score=cached.score, cpu_ms=self.costs.es_lookup_ms,
                 tag=SemanticTag(cached.canonical, cached.score, router.id),
+                # This class overrides ``resolve`` wholesale, so the imported-
+                # mapping check has to be repeated here; inheriting it was the
+                # first thing that went wrong when the defect was fixed, and it
+                # left rc-ndn-robust silently undefended while gs-ndn-robust
+                # worked.
+                learn=self._pending_for_imported(cached),
             )
 
         refuted = self.refuted[router.id].get(interest.name) if self.verify else None

@@ -192,6 +192,16 @@ class EsEntry:
     source: str = "local"      # "local" or the id of the router that taught us
     hits: int = 0
 
+    #: Whether *this* router has seen a producer answer on this mapping.
+    #:
+    #: Distinct from ``confirmed``, which an imported mapping arrives with
+    #: already set because the router that sent it had proof. The difference
+    #: matters under attack: a compromised peer supplies that proof by
+    #: assertion, so "somebody says this was confirmed" and "I have seen it
+    #: work" are not the same claim, and only the second one can be trusted
+    #: when the first may be forged.
+    locally_verified: bool = False
+
 
 class EmbeddingStore:
     """SAF's Embedding Store: an LRU cache of resolved names.

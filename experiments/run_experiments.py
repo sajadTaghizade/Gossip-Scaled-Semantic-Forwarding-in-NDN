@@ -62,16 +62,63 @@ REPORT_COLUMNS = (
 )
 
 
+#: Per-worker cache of the catalogs and embedding bundles, so a pool process
+#: loads each ``.npz`` once rather than once per run.
+_WORKER_CACHE: Dict[str, object] = {}
+
+
+def _worker_assets(domain: str, model: str):
+    key = f"{domain}.{model}"
+    cached = _WORKER_CACHE.get(key)
+    if cached is None:
+        cached = (
+            PrecomputedBackend(ROOT / "data" / "embeddings" / f"{key}.npz"),
+            datasets.load(domain),
+        )
+        _WORKER_CACHE[key] = cached
+    return cached
+
+
+def _run_one(payload) -> Dict[str, float]:
+    """One seeded run, in whichever process picks it up.
+
+    A module-level function taking only picklable arguments, because that is
+    what a process pool can dispatch. Determinism is unaffected by which worker
+    runs what: every run is a pure function of its own ``ScenarioConfig``, and
+    results are reassembled in submission order rather than completion order.
+    """
+    config, model = payload
+    backend, catalog = _worker_assets(config.domain, model)
+    return run_once(config, backend=backend, catalog=catalog).metrics
+
+
 class Bench:
     """Holds the loaded catalogs and embedding bundles across many runs."""
 
-    def __init__(self, domains: Sequence[str], model: str) -> None:
+    def __init__(self, domains: Sequence[str], model: str, jobs: int = 1) -> None:
         self.model = model
+        self.jobs = max(1, int(jobs))
         self.catalogs = {d: datasets.load(d) for d in domains}
         self.backends = {
             d: PrecomputedBackend(ROOT / "data" / "embeddings" / f"{d}.{model}.npz")
             for d in domains
         }
+        self._pool = None
+
+    def pool(self):
+        """A lazily created process pool, reused across every experiment."""
+        if self.jobs == 1:
+            return None
+        if self._pool is None:
+            from concurrent.futures import ProcessPoolExecutor
+
+            self._pool = ProcessPoolExecutor(max_workers=self.jobs)
+        return self._pool
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown()
+            self._pool = None
 
     def run(self, config: ScenarioConfig, seeds: Sequence[int]) -> List[RunResult]:
         return [
@@ -84,7 +131,14 @@ class Bench:
         ]
 
     def metrics(self, config: ScenarioConfig, seeds: Sequence[int]) -> List[Dict[str, float]]:
-        return [r.metrics for r in self.run(config, seeds)]
+        pool = self.pool()
+        if pool is None:
+            return [r.metrics for r in self.run(config, seeds)]
+        # ``map`` preserves input order, so the aggregate is identical to the
+        # serial one regardless of how the work was distributed.
+        return list(pool.map(
+            _run_one, [(config.with_seed(seed), self.model) for seed in seeds]
+        ))
 
 
 def base_config(domain: str, **overrides) -> ScenarioConfig:
@@ -94,6 +148,7 @@ def base_config(domain: str, **overrides) -> ScenarioConfig:
         variation_rate=overrides.pop("variation_rate", 0.4),
         distractor_rate=overrides.pop("distractor_rate", 0.1),
         overlap=overrides.pop("overlap", 0.5),
+        vocabulary_arrival_s=overrides.pop("vocabulary_arrival_s", 0.0),
     )
     churn = overrides.pop("churn", None)
     adversary = overrides.pop("adversary", None)
@@ -116,7 +171,10 @@ def exp_main(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows = {}
-        for strategy in ALL_STRATEGIES + ("rc-ndn", "gs-ndn-reasons", "rc-ndn-reasons"):
+        for strategy in ALL_STRATEGIES + (
+            "gs-ndn-robust", "rc-ndn", "rc-ndn-robust",
+            "gs-ndn-reasons", "rc-ndn-reasons",
+        ):
             config = base_config(domain, strategy=strategy, epsilon=0.2, n_edges=8)
             rows[strategy] = aggregate(bench.metrics(config, seeds))
         out[domain] = rows
@@ -446,6 +504,11 @@ def exp_ablation(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
         "gs-ndn": {"strategy": "gs-ndn"},
         "gs-ndn-no-gossip": {"strategy": "gs-ndn-no-gossip"},
         "gs-ndn-no-verify": {"strategy": "gs-ndn-no-verify"},
+        # Verification restricted to locally resolved mappings, which is what
+        # the code did until the defect was found. Against "gs-ndn" this is
+        # exactly what extending verification to the gossip path is worth.
+        "gs-ndn-unverified-import": {"strategy": "gs-ndn-unverified-import"},
+        "gs-ndn-robust": {"strategy": "gs-ndn-robust"},
         "gs-ndn-anti-entropy-only": {"strategy": "gs-ndn", "gossip_rumour_push": False},
         "gs-ndn-slow-gossip": {"strategy": "gs-ndn", "gossip_interval_ms": 5000.0},
     }
@@ -710,7 +773,10 @@ def exp_poisoning(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
         rows: Dict[str, object] = {}
-        for strategy in ("gs-ndn", "gs-ndn-no-verify", "rc-ndn", "rc-ndn-reasons"):
+        for strategy in (
+            "gs-ndn", "gs-ndn-unverified-import", "gs-ndn-no-verify",
+            "gs-ndn-robust", "rc-ndn", "rc-ndn-robust", "rc-ndn-reasons",
+        ):
             per_share = {}
             for share in shares:
                 config = base_config(
@@ -1066,7 +1132,143 @@ def exp_horizon(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+ROBUST_PAIRS = (("gs-ndn", "gs-ndn-robust"), ("rc-ndn", "rc-ndn-robust"))
+
+#: The pre-fix behaviour, carried through the same sweep so the two halves of
+#: the recovery -- extending verification to imports, then attributing those
+#: verdicts to peers -- are never reported as one number.
+ROBUST_REFERENCE = "gs-ndn-unverified-import"
+
+
+def exp_robust(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Does attributing a refusal to whoever supplied the claim blunt §9?
+
+    Section 9 measures the attack landing and names the two defences it does
+    not implement. This is the second of them -- reputation -- and the arm is a
+    single variable against its own baseline: ``gs-ndn-robust`` differs from
+    ``gs-ndn`` only in that a retraction is charged to the peer that taught the
+    mapping, a pair this router has disproved is not reinstalled from gossip,
+    and no single peer may own more than a quarter of a route's calibration
+    window.
+
+    Two things are reported that a satisfaction number alone would hide. The
+    share at 0.0 is the *cost* of the defence on an honest network, which is
+    the number that decides whether it can be left switched on. And
+    ``rep_peers_distrusted`` says whether the mechanism actually identified
+    anybody, as opposed to helping for some unrelated reason -- a defence that
+    improves the metric without ever distrusting a compromised peer has not
+    been shown to work.
+    """
+    shares = (0.0, 0.125, 0.25, 0.5)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        arms = (ROBUST_REFERENCE,) + tuple(s for pair in ROBUST_PAIRS for s in pair)
+        for strategy in arms:
+            per_share = {}
+            for share in shares:
+                config = base_config(
+                    domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                    adversary=AdversaryConfig(compromised_share=share),
+                )
+                per_share[str(share)] = aggregate(bench.metrics(config, seeds))
+            rows[strategy] = per_share
+        out[domain] = rows
+
+        print(f"\n--- {domain}: reputation against a poisoning attacker ---")
+        reference = rows[ROBUST_REFERENCE]
+        print(f"  {ROBUST_REFERENCE} (verification restricted to local mappings)")
+        for share in shares:
+            m = reference[str(share)]
+            print(
+                f"    share {share:<5} ISR {m['isr']['mean']:.3f}   "
+                f"err {m['risk_realised_error']['mean']:.3f}   "
+                f"poison live {m['adv_poison_live']['mean']:.0f}"
+            )
+        for base, robust in ROBUST_PAIRS:
+            print(f"  {base} -> {robust}")
+            for share in shares:
+                b = rows[base][str(share)]
+                r = rows[robust][str(share)]
+                d_isr = r["isr"]["mean"] - b["isr"]["mean"]
+                d_err = (
+                    r["risk_realised_error"]["mean"] - b["risk_realised_error"]["mean"]
+                )
+                print(
+                    f"    share {share:<5} ISR {b['isr']['mean']:.3f} -> "
+                    f"{r['isr']['mean']:.3f} ({d_isr:+.3f})   "
+                    f"err {b['risk_realised_error']['mean']:.3f} -> "
+                    f"{r['risk_realised_error']['mean']:.3f} ({d_err:+.3f})   "
+                    f"poison live {b['adv_poison_live']['mean']:.0f} -> "
+                    f"{r['adv_poison_live']['mean']:.0f}   "
+                    f"distrusted {r['rep_peers_distrusted']['mean']:.1f}"
+                )
+    return out
+
+
+def exp_vocabulary(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """What the sharing win is actually proportional to.
+
+    Section 2 reports that gossip's saving falls from 26% to 7.5% as the run
+    goes from 60 to 600 seconds, and treats that as a scope condition on the
+    result. It is a scope condition on the *experiment*. Every run there uses a
+    closed vocabulary: all 300 rewordings are askable from t=0, so once every
+    router has met all of them there is nothing left for anyone to learn and
+    sharing necessarily stops paying. The decay measures the catalog running
+    out, not the protocol wearing off.
+
+    A deployment's vocabulary does not run out -- new client applications,
+    vendors and integrations keep introducing phrasings nobody has resolved
+    yet. ``vocabulary_arrival_s`` is the rate at which that happens, and this
+    experiment sweeps it against the horizon that exposed the decay.
+
+    The prediction under test, stated before the run: the saving decays toward
+    zero only when arrivals are off, and settles at a positive floor set by the
+    arrival rate when they are on. If it decays to the same place regardless,
+    the reframing is wrong and §2's scope condition stands as originally
+    written.
+    """
+    # 0.0 is the closed catalog §2 measured; the rest introduce the catalog's
+    # 300 rewordings over roughly 150s, 600s and 1500s respectively.
+    arrivals = (0.0, 0.5, 2.0, 5.0)
+    horizons = (60_000.0, 240_000.0, 600_000.0)
+    n_edges = 16
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        for arrival in arrivals:
+            per_horizon = {}
+            for horizon in horizons:
+                per_strategy = {}
+                for strategy in ("saf+es", "gs-ndn"):
+                    config = base_config(
+                        domain, strategy=strategy, n_edges=n_edges,
+                        duration_ms=horizon, vocabulary_arrival_s=arrival,
+                    )
+                    per_strategy[strategy] = aggregate(bench.metrics(config, seeds))
+                per_horizon[str(horizon)] = per_strategy
+            rows[str(arrival)] = per_horizon
+        out[domain] = rows
+
+        print(f"\n--- {domain}: sharing win against vocabulary arrival rate ---")
+        print(f"    (encoder inferences saved by gossip, {n_edges} edge routers)")
+        header = "  ".join(f"{h/1000:>7.0f}s" for h in horizons)
+        print(f"    {'arrival':<10} {header}")
+        for arrival in arrivals:
+            cells = []
+            for horizon in horizons:
+                pair = rows[str(arrival)][str(horizon)]
+                es = pair["saf+es"]["encoder_runs"]["mean"]
+                gs = pair["gs-ndn"]["encoder_runs"]["mean"]
+                cells.append(f"{(es - gs) / es * 100:>7.1f}%" if es else "      -")
+            label = "closed" if arrival == 0.0 else f"{arrival}s"
+            print(f"    {label:<10} {'  '.join(cells)}")
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
+    "robust": exp_robust,
+    "vocabulary": exp_vocabulary,
     "horizon": exp_horizon,
     "coverage": exp_coverage,
     "risk": exp_risk,
@@ -1095,7 +1297,18 @@ def main() -> int:
     parser.add_argument("--domains", nargs="+", default=list(datasets.DOMAINS))
     parser.add_argument("--model", default="all-MiniLM-L6-v2-onnx")
     parser.add_argument("--out", type=Path, default=RESULTS_DIR)
+    parser.add_argument(
+        "--jobs", type=int, default=1,
+        help="seeded runs to execute in parallel (0 = one per CPU core). "
+             "Results are identical to --jobs 1: every run is a pure function "
+             "of its own seeded config, and output is reassembled in "
+             "submission order.",
+    )
     args = parser.parse_args()
+    if args.jobs == 0:
+        import os
+
+        args.jobs = os.cpu_count() or 1
 
     chosen = sorted(EXPERIMENTS) if args.all else (args.experiment or ["main"])
     seeds = list(range(1, args.seeds + 1))
@@ -1104,7 +1317,9 @@ def main() -> int:
         print(f"[!] {COSTS_PATH} missing -- latencies will be assumed, not measured.")
         print("    Run: python experiments/bench_micro.py")
 
-    bench = Bench(args.domains, args.model)
+    bench = Bench(args.domains, args.model, jobs=args.jobs)
+    if bench.jobs > 1:
+        print(f"[+] running {bench.jobs} seeded runs in parallel")
     args.out.mkdir(parents=True, exist_ok=True)
 
     for name in chosen:
