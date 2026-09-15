@@ -338,12 +338,17 @@ class Producer(Node):
             )
             self.sim.schedule(self.service_ms, self._reply, data, in_face)
         else:
-            # The name is one this producer publishes, so the route was right;
-            # what failed is that the client's phrasing is not in the schema this
-            # producer declared. It says so rather than reporting a routing
-            # error, because the two are not the same fact and only the producer
-            # is in a position to tell them apart.
-            self._refuse(interest, in_face, REFUSAL_UNKNOWN_WORDING)
+            # Which of the two refusals this is, decided by the producer from
+            # its own declaration rather than assumed. Asking only whether the
+            # *resolved prefix* is one we publish cannot tell them apart: a
+            # misroute arrives here because we publish that prefix, so it always
+            # answered "yes" and every misroute was reported as a wording gap.
+            # See AdmissionPolicy.refusal_reason.
+            reason = (
+                self.policy.refusal_reason(target, interest.name)
+                if self.policy is not None else REFUSAL_UNKNOWN_WORDING
+            )
+            self._refuse(interest, in_face, reason)
 
     def _refuse(self, interest: Interest, in_face: str, reason: str) -> None:
         self.refused += 1

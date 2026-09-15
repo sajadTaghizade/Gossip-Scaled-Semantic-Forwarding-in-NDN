@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, Optional, Sequence, Set
 
 from .datasets.schema import name_to_text
+from .packets import REFUSAL_NO_SUCH_SERVICE, REFUSAL_UNKNOWN_WORDING
 
 
 def tokens(ndn_name: str) -> Set[str]:
@@ -114,6 +115,44 @@ class AdmissionPolicy:
         else:
             self.refused += 1
         return verdict
+
+    def refusal_reason(self, resolved_prefix: str, requested_name: str) -> str:
+        """Why this request was refused, from what the producer knows locally.
+
+        The distinction the Nack carries is only worth anything if the producer
+        can actually make it, and until this existed it could not: the caller
+        asked ``target not in self.names``, where ``target`` is the canonical
+        prefix *the router chose*. A semantic misroute is routed here precisely
+        because this producer publishes that prefix, so that test passed, the
+        wording then failed the schema, and every misroute was reported as
+        ``unknown-wording``. Measured at ``alias_coverage=1.0``, where a genuine
+        wording gap is nearly impossible: 132 of 157 refusals said
+        "unknown-wording" about a route that was simply wrong, 23 were
+        unsatisfiable distractors, and 2 were the case the reason is *for*.
+        ``no-such-service`` never fired once. The channel §16 is built on was
+        carrying almost no information.
+
+        What a producer genuinely knows is which *instance* it is attached to --
+        the room, the junction, the meter. If the request does not name that
+        instance it is not for this service, whatever the wording, and saying so
+        is a routing fact. That test is exact here: every instance mismatch in
+        the run above was a real misroute or an unsatisfiable distractor, with
+        no false positives.
+
+        What remains under ``unknown-wording`` is genuinely ambiguous and stays
+        that way: a producer serving temperature in room 101, asked for humidity
+        in room 101, cannot tell a metric it does not serve from a synonym of
+        its own that it forgot to declare. That irreducible residue is the real
+        content of §16, and it is narrower than the defect made it look.
+        """
+        schema = self.schemas.get(resolved_prefix)
+        if schema is None:
+            return REFUSAL_NO_SUCH_SERVICE
+        if schema.required_instance and not tokens(schema.instance) <= tokens(
+            requested_name
+        ):
+            return REFUSAL_NO_SUCH_SERVICE
+        return REFUSAL_UNKNOWN_WORDING
 
     @property
     def decisions(self) -> int:

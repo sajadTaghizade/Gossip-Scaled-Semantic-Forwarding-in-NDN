@@ -71,6 +71,7 @@ class RiskControlledNdn(GsNdn):
         reason_aware: bool = False,
         robust: bool = False,
         verify_imported: bool = True,
+        propensity_weighted: bool = False,
     ) -> None:
         # The threshold survives only as the prior for routes with no evidence,
         # which is what makes this strictly a superset of the fixed-threshold
@@ -96,6 +97,11 @@ class RiskControlledNdn(GsNdn):
             epsilon=epsilon, prior=threshold, confidence=confidence,
             explore_rate=explore_rate, adaptive=adaptive, adapt_rate=adapt_rate,
         )
+        #: Take an ambiguous refusal at the weight the route's own history
+        #: supports, instead of vetoing it or counting it in full.
+        self.propensity_weighted = propensity_weighted
+        self._propensity_weighted = 0
+        self._propensity_weight_sum = 0.0
         self.blocked_by_risk = 0
         self.explorations = 0
 
@@ -207,12 +213,39 @@ class RiskControlledNdn(GsNdn):
     # -- learning --------------------------------------------------------
 
     def on_confirmed(self, router: "Router", mapping: PendingMapping, now: float) -> None:
+        # A route that keeps serving is a route whose refusals are more likely
+        # vocabulary gaps than routing errors. This is the numerator of the
+        # propensity in gsndn.risk.
+        self.controller(router).note_outcome(mapping.canonical, served=True)
         self._record(router, mapping, correct=True, now=now)
         super().on_confirmed(router, mapping, now)
 
     def on_rejected(
         self, router: "Router", mapping: PendingMapping, reason: str = "",
     ) -> None:
+        controller = self.controller(router)
+        if self.propensity_weighted and reason == REFUSAL_UNKNOWN_WORDING:
+            # Neither veto nor ignore. The producer says the route was right and
+            # only the phrasing was undeclared; whether to believe that is a
+            # question about this route's history, so the observation is taken
+            # at the weight that history supports. Propensity is read before
+            # this refusal is counted, so a refusal cannot discount itself.
+            weight = 1.0 - controller.wording_gap_propensity(mapping.canonical)
+            controller.note_outcome(
+                mapping.canonical, served=False, wording_refusal=True
+            )
+            self.wording_refusals += 1
+            self._propensity_weight_sum += weight
+            self._propensity_weighted += 1
+            self._record(
+                router, mapping, correct=False, now=router.sim.now, weight=weight
+            )
+            super().on_rejected(router, mapping, reason)
+            return
+        if reason == REFUSAL_UNKNOWN_WORDING:
+            controller.note_outcome(
+                mapping.canonical, served=False, wording_refusal=True
+            )
         if self.reason_aware and reason == REFUSAL_UNKNOWN_WORDING:
             # Not evidence about this route's score. The encoder picked the
             # producer that does publish this name, so the decision the budget
@@ -226,10 +259,14 @@ class RiskControlledNdn(GsNdn):
         self._record(router, mapping, correct=False, now=router.sim.now)
         super().on_rejected(router, mapping, reason)
 
-    def _record(self, router: "Router", mapping: PendingMapping, correct: bool, now: float) -> None:
+    def _record(
+        self, router: "Router", mapping: PendingMapping, correct: bool, now: float,
+        weight: float = 1.0,
+    ) -> None:
         """Turn one answered forwarding decision into calibration evidence."""
         observation = Observation(
-            score=mapping.score, correct=correct, at_ms=now, source="local"
+            score=mapping.score, correct=correct, at_ms=now, source="local",
+            weight=weight,
         )
         self.controller(router).observe(mapping.canonical, observation)
         if self.share_evidence and router.gossip_protocol is not None:
@@ -241,6 +278,11 @@ class RiskControlledNdn(GsNdn):
         data = super().stats()
         data["blocked_by_risk"] = self.blocked_by_risk
         data["explorations"] = self.explorations
+        data["propensity_weighted_obs"] = self._propensity_weighted
+        data["propensity_weight_mean"] = (
+            self._propensity_weight_sum / self._propensity_weighted
+            if self._propensity_weighted else 1.0
+        )
         if not self.controllers:
             return data
 

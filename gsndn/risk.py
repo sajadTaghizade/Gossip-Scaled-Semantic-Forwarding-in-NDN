@@ -69,6 +69,25 @@ class Observation:
     at_ms: float = 0.0
     source: str = "local"
 
+    #: How much of an observation this is. 1.0 is an ordinary one.
+    #:
+    #: Below 1.0 it is an inverse-propensity weight, and it exists for one
+    #: situation: a producer's refusal that may not be a routing error at all.
+    #: After ``AdmissionPolicy.refusal_reason`` learned to separate the two
+    #: refusals, ``unknown-wording`` still means different things at different
+    #: declaration coverages -- 2 of 94 such refusals are genuine vocabulary
+    #: gaps when producers declare everything, 388 of 546 when they declare
+    #: half. An operator does not know which regime they are in.
+    #:
+    #: Treating the reason as a veto (drop every such observation) is right in
+    #: the second regime and badly wrong in the first; treating it as nothing
+    #: is the reverse. A weight lets the controller do neither, and take the
+    #: observation at the rate the evidence says it is real. This is inverse
+    #: propensity scoring (Saito et al., WSDM 2020) with the propensity
+    #: estimated rather than assumed, which is possible here only because a
+    #: forwarding plane sees the same route hundreds of times.
+    weight: float = 1.0
+
 
 @dataclass
 class RouteCalibrator:
@@ -104,22 +123,33 @@ class RouteCalibrator:
         if not self.observations:
             return None
         ordered = sorted(self.observations, key=lambda o: o.score, reverse=True)
-        errors = 0
+        errors = 0.0
+        seen = 0.0
         best: Optional[float] = None
-        for seen, observation in enumerate(ordered, start=1):
+        for observation in ordered:
+            # Weighted counts, so a down-weighted refusal contributes a fraction
+            # of an error *and* a fraction of a trial. Counting it as a partial
+            # error while still charging it a whole trial would silently make
+            # every boundary look safer than its evidence supports.
+            seen += observation.weight
             if not observation.correct:
-                errors += 1
+                errors += observation.weight
+            if seen <= 0.0:
+                continue
             if _upper_error_bound(errors, seen, confidence) <= epsilon:
                 best = observation.score
         return best
 
-    def empirical_error(self, boundary: float) -> Tuple[int, int]:
-        """Errors and total among observations at or above ``boundary``."""
+    def empirical_error(self, boundary: float) -> Tuple[float, float]:
+        """Weighted errors and total among observations at or above ``boundary``."""
         above = [o for o in self.observations if o.score >= boundary]
-        return sum(1 for o in above if not o.correct), len(above)
+        return (
+            sum(o.weight for o in above if not o.correct),
+            sum(o.weight for o in above),
+        )
 
 
-def _upper_error_bound(errors: int, trials: int, confidence: float) -> float:
+def _upper_error_bound(errors: float, trials: float, confidence: float) -> float:
     """One-sided upper confidence bound on an error rate.
 
     The Wilson interval rather than the normal approximation, because the counts
@@ -238,6 +268,10 @@ class RiskController:
     )
     _cache: Dict[str, float] = field(default_factory=dict)
 
+    #: Per-route serve / wording-refusal counts behind the propensity.
+    _served: Dict[str, int] = field(default_factory=dict)
+    _wording_refused: Dict[str, int] = field(default_factory=dict)
+
     observations_local: int = 0
     observations_remote: int = 0
     decisions_allowed: int = 0
@@ -343,6 +377,39 @@ class RiskController:
             self.observations_local += 1
         else:
             self.observations_remote += 1
+
+    def wording_gap_propensity(self, prefix: str) -> float:
+        """How likely an ``unknown-wording`` refusal on this route is genuine.
+
+        A route that keeps successfully serving other wordings is a live,
+        correctly-chosen route, and a refusal on it is most likely a hole in the
+        producer's declared vocabulary. A route that is refused for wording
+        after wording and almost never serves anything is simply the wrong
+        route, whatever reason the producer gives.
+
+        So the estimate is the route's own serve rate among the decisions the
+        reason leaves ambiguous:
+
+            pi(c) = served(c) / (served(c) + unknown_wording_refusals(c))
+
+        with a Laplace prior of one success and one failure, so a route with no
+        history sits at 0.5 -- half-believing the producer -- rather than at an
+        extreme that one observation could not support.
+
+        Nothing here needs a coordinator or a labelled sample. It is estimated
+        from outcomes the forwarding plane already collects, which is the same
+        argument §6 makes for the boundaries themselves.
+        """
+        served = self._served.get(prefix, 0)
+        refused = self._wording_refused.get(prefix, 0)
+        return (served + 1.0) / (served + refused + 2.0)
+
+    def note_outcome(self, prefix: str, served: bool, wording_refusal: bool = False) -> None:
+        """Book-keeping behind :meth:`wording_gap_propensity`."""
+        if served:
+            self._served[prefix] = self._served.get(prefix, 0) + 1
+        elif wording_refusal:
+            self._wording_refused[prefix] = self._wording_refused.get(prefix, 0) + 1
 
     def held_from(self, prefix: str, source: str) -> int:
         """How many of this route's live observations came from one source.

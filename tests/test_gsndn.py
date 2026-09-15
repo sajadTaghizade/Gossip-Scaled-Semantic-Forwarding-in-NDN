@@ -849,3 +849,79 @@ def test_every_verifying_arm_checks_its_imported_mappings():
             f"{strategy} never retracted an imported mapping under attack, "
             "so its verification is not reaching the gossip path"
         )
+
+
+# --- refusal reasons and propensity weighting --------------------------------
+
+
+def test_a_producer_separates_a_wrong_route_from_an_undeclared_wording():
+    """The defect that made §16's reason channel carry almost no information.
+
+    The producer asked ``target not in self.names``, where ``target`` is the
+    canonical prefix the *router* chose. A misroute arrives precisely because
+    this producer publishes that prefix, so the test always said "yes" and every
+    misroute was reported as a wording gap: measured at alias_coverage=1.0,
+    132 of 157 refusals said "unknown-wording" about a route that was simply
+    wrong, and ``no-such-service`` never fired once.
+    """
+    from gsndn.admission import AdmissionPolicy, ServiceSchema
+    from gsndn.packets import REFUSAL_NO_SUCH_SERVICE, REFUSAL_UNKNOWN_WORDING
+
+    schema = ServiceSchema(
+        canonical="/h/b-a/f1/temperature/room-101", instance="room-101",
+        declared=frozenset({"temperature"}),
+    )
+    policy = AdmissionPolicy(schemas={schema.canonical: schema})
+
+    # Same instance, a metric this producer does not declare: genuinely
+    # ambiguous, and the producer says so.
+    assert policy.refusal_reason(
+        schema.canonical, "/hospital/thermal-sensor/room-101"
+    ) == REFUSAL_UNKNOWN_WORDING
+    # A different instance is not this service, whatever the wording. The
+    # producer knows which room it is in, so this is a routing fact.
+    assert policy.refusal_reason(
+        schema.canonical, "/hospital/temperature/room-204"
+    ) == REFUSAL_NO_SUCH_SERVICE
+    # A prefix this producer does not publish at all.
+    assert policy.refusal_reason(
+        "/h/b-a/f1/humidity/room-101", "/hospital/humidity/room-101"
+    ) == REFUSAL_NO_SUCH_SERVICE
+
+
+def test_propensity_rises_with_a_route_that_keeps_serving():
+    controller = RiskController(epsilon=0.2, prior=0.6)
+    # No history: half-believe the producer rather than commit either way.
+    assert controller.wording_gap_propensity("/fresh") == pytest.approx(0.5)
+    for _ in range(9):
+        controller.note_outcome("/live", served=True)
+    controller.note_outcome("/live", served=False, wording_refusal=True)
+    for _ in range(9):
+        controller.note_outcome("/bad", served=False, wording_refusal=True)
+    assert controller.wording_gap_propensity("/live") > 0.8
+    assert controller.wording_gap_propensity("/bad") < 0.2
+
+
+def test_a_down_weighted_refusal_counts_as_a_fraction_of_a_trial():
+    """Not just a fraction of an error.
+
+    Counting a weighted observation as a partial error while still charging it
+    a whole trial would make every boundary look better supported than it is.
+    """
+    controller = RiskController(epsilon=0.2, prior=0.6)
+    controller.observe("/r", Observation(0.9, True, 0.0))
+    controller.observe("/r", Observation(0.8, False, 0.0, weight=0.25))
+    errors, total = controller.routes["/r"].empirical_error(0.0)
+    assert errors == pytest.approx(0.25)
+    assert total == pytest.approx(1.25)
+
+
+def test_unweighted_observations_are_unchanged_by_the_weighted_estimator():
+    """Weights must not perturb any arm that does not use them."""
+    plain = RiskController(epsilon=0.2, prior=0.6)
+    weighted = RiskController(epsilon=0.2, prior=0.6)
+    for i in range(40):
+        obs = Observation(0.5 + i / 100.0, i % 4 != 0, float(i))
+        plain.observe("/r", obs)
+        weighted.observe("/r", Observation(obs.score, obs.correct, obs.at_ms, weight=1.0))
+    assert plain.boundary_for("/r") == pytest.approx(weighted.boundary_for("/r"))

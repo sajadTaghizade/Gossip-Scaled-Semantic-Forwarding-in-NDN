@@ -48,6 +48,9 @@ STRATEGIES = (
     # defect's cost stays measurable and so results published before the fix can
     # be reproduced on demand.
     "gs-ndn-unverified-import",
+    # The refusal reason taken as evidence with a weight rather than as a veto:
+    # inverse propensity scoring over the ambiguous refusals.
+    "rc-ndn-ips",
 )
 
 
@@ -107,6 +110,13 @@ def build_strategy(
             explore_rate=explore_rate, robust=True, verify_imported=True,
         )
         strategy.name = "rc-ndn-robust"
+        return strategy
+    if name == "rc-ndn-ips":
+        strategy = RiskControlledNdn(
+            threshold, costs, epsilon=epsilon, confidence=confidence,
+            explore_rate=explore_rate, propensity_weighted=True,
+        )
+        strategy.name = "rc-ndn-ips"
         return strategy
     if name == "rc-ndn-aci":
         # Adaptive Conformal Inference: the budget itself moves in response to

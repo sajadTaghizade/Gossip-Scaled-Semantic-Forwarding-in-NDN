@@ -7346,6 +7346,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -7378,6 +7386,14 @@
           "min": 0.0,
           "max": 64.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 119.45,
           "std": 20.84901865669865,
@@ -7401,6 +7417,22 @@
           "n": 20,
           "min": 83.0,
           "max": 106.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 85.63245181274986,
@@ -8012,6 +8044,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -8044,6 +8084,14 @@
           "min": 0.0,
           "max": 96.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 179.4,
           "std": 33.489039841023875,
@@ -8067,6 +8115,22 @@
           "n": 20,
           "min": 124.0,
           "max": 150.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 87.6593113816352,
@@ -8312,7 +8376,7 @@
       "100": {
         "accuracy": {
           "mean": 0.9463011545999527,
-          "std": 0.0032405258595461146,
+          "std": 0.003240525859546115,
           "ci95": 0.0014202230765390455,
           "n": 20,
           "min": 0.94054417198522,
@@ -8678,6 +8742,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -8710,6 +8782,14 @@
           "min": 0.0,
           "max": 110.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 209.95,
           "std": 38.286283100925466,
@@ -8733,6 +8813,22 @@
           "n": 20,
           "min": 159.0,
           "max": 191.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 92.89714106984223,
@@ -9344,6 +9440,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -9376,6 +9480,14 @@
           "min": 0.0,
           "max": 128.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 261.3,
           "std": 38.033364853839366,
@@ -9399,6 +9511,22 @@
           "n": 20,
           "min": 191.0,
           "max": 224.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 96.92861166097684,
@@ -10010,6 +10138,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -10042,6 +10178,14 @@
           "min": 0.0,
           "max": 160.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 294.35,
           "std": 40.94576001441291,
@@ -10065,6 +10209,22 @@
           "n": 20,
           "min": 208.0,
           "max": 232.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 103.10955826691966,
@@ -10676,6 +10836,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -10708,6 +10876,14 @@
           "min": 29.0,
           "max": 128.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 307.5,
           "std": 28.63472312457469,
@@ -10731,6 +10907,22 @@
           "n": 20,
           "min": 227.0,
           "max": 244.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 111.9704639929414,
@@ -11342,6 +11534,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -11374,6 +11574,14 @@
           "min": 0.0,
           "max": 107.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 308.5,
           "std": 31.79125997072648,
@@ -11397,6 +11605,22 @@
           "n": 20,
           "min": 239.0,
           "max": 255.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 121.42403021968842,
@@ -18822,8 +19046,8 @@
         },
         "energy_idle_j": {
           "mean": 117.33428175675363,
-          "std": 0.1704498364799533,
-          "ci95": 0.07470293454008821,
+          "std": 0.17044983647995327,
+          "ci95": 0.0747029345400882,
           "n": 20,
           "min": 117.06333674309593,
           "max": 117.64320631081836
@@ -18988,6 +19212,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -19020,6 +19252,14 @@
           "min": 0.0,
           "max": 96.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 132.2,
           "std": 26.91819967390484,
@@ -19043,6 +19283,22 @@
           "n": 20,
           "min": 87.0,
           "max": 111.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 83.26458089596092,
@@ -19654,6 +19910,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -19686,6 +19950,14 @@
           "min": 0.0,
           "max": 126.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 175.5,
           "std": 33.89379697945054,
@@ -19709,6 +19981,22 @@
           "n": 20,
           "min": 125.0,
           "max": 149.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 83.42362109531162,
@@ -20320,6 +20608,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -20352,6 +20648,14 @@
           "min": 0.0,
           "max": 96.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 214.45,
           "std": 31.926684104283943,
@@ -20375,6 +20679,22 @@
           "n": 20,
           "min": 159.0,
           "max": 190.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 87.60167377980245,
@@ -20986,6 +21306,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -21018,6 +21346,14 @@
           "min": 0.0,
           "max": 118.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 249.85,
           "std": 33.52811075092535,
@@ -21041,6 +21377,22 @@
           "n": 20,
           "min": 186.0,
           "max": 214.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 91.21166333968614,
@@ -21652,6 +22004,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -21684,6 +22044,14 @@
           "min": 32.0,
           "max": 128.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 287.15,
           "std": 27.817591934828428,
@@ -21707,6 +22075,22 @@
           "n": 20,
           "min": 198.0,
           "max": 223.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 94.57870998160712,
@@ -22318,6 +22702,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -22350,6 +22742,14 @@
           "min": 0.0,
           "max": 128.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 292.8,
           "std": 34.379614522807586,
@@ -22373,6 +22773,22 @@
           "n": 20,
           "min": 216.0,
           "max": 233.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 99.24878862702774,
@@ -22984,6 +23400,14 @@
           "min": 0.0,
           "max": 0.0
         },
+        "gossip_evidence_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_evidence_sent": {
           "mean": 0.0,
           "std": 0.0,
@@ -23016,6 +23440,14 @@
           "min": 0.0,
           "max": 170.0
         },
+        "gossip_mappings_rejected_untrusted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
         "gossip_mappings_sent": {
           "mean": 294.25,
           "std": 41.23727874017315,
@@ -23039,6 +23471,22 @@
           "n": 20,
           "min": 229.0,
           "max": 242.0
+        },
+        "imported_confirmed": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "imported_retracted": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0,
+          "n": 20,
+          "min": 0.0,
+          "max": 0.0
         },
         "irt_max_ms": {
           "mean": 105.17289465739161,

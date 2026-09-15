@@ -44,6 +44,8 @@ PALETTE = {
     "gs-ndn-unverified-import": "#b07b2f",
     "rc-ndn": "#00707a",
     "rc-ndn-robust": "#4a148c",
+    "gs-ndn-reasons": "#b5651d",
+    "rc-ndn-reasons": "#7a4a1d",
 }
 MARKERS = {
     "vanilla-ndn": "o", "saf": "s", "saf+es": "^", "gs-ndn": "D",
@@ -70,6 +72,8 @@ LABELS = {
     "gs-ndn-robust": "GS-NDN + reputation (ours)",
     "gs-ndn-unverified-import": "GS-NDN, imports unverified",
     "rc-ndn": "RC-NDN", "rc-ndn-robust": "RC-NDN + reputation",
+    "gs-ndn-reasons": "GS-NDN, reason-aware",
+    "rc-ndn-reasons": "RC-NDN, reason-aware",
 }
 
 TEXT_PRIMARY = "#0b0b0b"
@@ -266,7 +270,9 @@ def fig_main(data: dict, out: Path) -> None:
     domains = list(data)
     metrics = [("isr", "Interest satisfaction"), ("precision", "Precision"),
                ("encoder_runs", "Encoder inferences")]
-    fig, axes = plt.subplots(len(domains), 3, figsize=(10.5, 3.0 * len(domains)), squeeze=False)
+    fig, axes = plt.subplots(
+        len(domains), 3, figsize=(14.0, 3.7 * len(domains)), squeeze=False
+    )
 
     for row, domain in enumerate(domains):
         strategies = list(data[domain])
@@ -280,16 +286,28 @@ def fig_main(data: dict, out: Path) -> None:
                 color=[PALETTE.get(s, "#52514e") for s in strategies],
                 edgecolor="#fcfcfb", linewidth=1.2,
             )
-            for bar, value in zip(bars, values):
+            if metric == "precision":
+                # Every arm scores between 0.995 and 1.000, so a 0-1 axis draws
+                # nine identical bars and hides the only thing this panel is
+                # for: which arms trade precision for recall. Truncated, and
+                # the title says so -- truncating silently is the dishonest
+                # version of this.
+                floor = min(v - e for v, e in zip(values, errors))
+                ax.set_ylim(max(0.0, floor - 0.0015), 1.0006)
+                title = "Precision (axis truncated)"
+            for bar, value, error in zip(bars, values, errors):
+                # Rotated: nine labels like "0.941" side by side in one panel
+                # overrun each other and rendered as "0.9410.941".
                 ax.annotate(
                     f"{value:,.0f}" if metric == "encoder_runs" else f"{value:.3f}",
-                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                    xytext=(0, 3), textcoords="offset points",
-                    ha="center", fontsize=7.5, color=TEXT_PRIMARY,
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height() + error),
+                    xytext=(0, 4), textcoords="offset points", rotation=90,
+                    ha="center", va="bottom", fontsize=7, color=TEXT_PRIMARY,
                 )
+            ax.margins(y=0.26)
             ax.set_xticks(positions)
             ax.set_xticklabels([LABELS.get(s, s) for s in strategies],
-                               rotation=20, ha="right", fontsize=7.5)
+                               rotation=34, ha="right", fontsize=7.5)
             ax.set_title(f"{domain} - {title}" if col == 0 else title)
             ax.grid(axis="x", visible=False)
             tidy(ax)
