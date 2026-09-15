@@ -383,3 +383,32 @@ A tenfold slower period sends 28% fewer bytes, converges *further*, and costs 3%
 more encoder work and 0.001 satisfaction. The 500 ms period is not justified by
 our own data. `gossip_adaptive` backs the period off per router while a router's
 digests keep agreeing; it is implemented and under evaluation.
+
+### 4.6 Adaptive anti-entropy: matches a well-chosen constant, does not beat it
+
+Hospital, 8 edges, 5 seeds, gossip bytes against the 500 ms design point:
+
+| horizon | fixed 500 ms | fixed 5 s | adaptive backoff |
+|---|---:|---:|---:|
+| 60 s | — | **−28.6%** | −13.4% |
+| 240 s | — | −37.0% | **−37.9%** |
+
+Satisfaction is identical across all three at both horizons (0.940 / 0.949, every
+pair inside its interval) and encoder work moves by at most 2.3%.
+
+Read honestly, the mechanism is not the finding. A backoff needs rounds to build
+up, so over 60 s it captures less than half of what simply lengthening the period
+achieves, and only at 240 s does it draw level. **The finding is the parameter:
+the 500 ms period costs 28-37% of gossip bytes for nothing**, and no part of the
+design justified it — rumour push delivers new mappings within a link delay, so
+periodic anti-entropy is mostly digests that already agree.
+
+What the adaptive arm is worth is narrower and worth stating as such: it reaches
+the same place without the period being tuned, which is the argument §6 makes for
+the error budget applied to a different constant. An operator who profiles their
+own deployment should set the period and will do slightly better at short
+horizons.
+
+**Recommendation for the paper.** Report the sweep, change the default to 5 s,
+and present the adaptive arm as a zero-tuning alternative rather than as an
+improvement. Do not claim a new mechanism where a constant did the work.
