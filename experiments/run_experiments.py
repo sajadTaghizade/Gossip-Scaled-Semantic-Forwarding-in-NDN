@@ -510,7 +510,10 @@ def exp_ablation(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
         "gs-ndn-unverified-import": {"strategy": "gs-ndn-unverified-import"},
         "gs-ndn-robust": {"strategy": "gs-ndn-robust"},
         "gs-ndn-anti-entropy-only": {"strategy": "gs-ndn", "gossip_rumour_push": False},
-        "gs-ndn-slow-gossip": {"strategy": "gs-ndn", "gossip_interval_ms": 5000.0},
+        # The former default. 5 s is now the default, so the arm that keeps
+        # the ablation meaningful is the *fast* one -- otherwise this row
+        # would be gs-ndn compared against itself.
+        "gs-ndn-fast-gossip": {"strategy": "gs-ndn", "gossip_interval_ms": 500.0},
     }
     out: Dict[str, object] = {}
     for domain in bench.catalogs:

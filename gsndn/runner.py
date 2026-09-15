@@ -70,7 +70,24 @@ class ScenarioConfig:
     churn: ChurnConfig = field(default_factory=ChurnConfig)
     adversary: AdversaryConfig = field(default_factory=AdversaryConfig)
 
-    gossip_interval_ms: float = 500.0
+    #: Anti-entropy period. 5 s rather than 500 ms because the ablation says so:
+    #: at a tenfold longer period the same network sends 28% fewer gossip bytes
+    #: over 60 s and 37% fewer over 240 s, converges *further* (coverage 0.868
+    #: against 0.800), and moves satisfaction by 0.001 and encoder work by 2%.
+    #: Rumour push already hands a new mapping to every neighbour within a link
+    #: delay, so a short period buys redundant digests and nothing else.
+    gossip_interval_ms: float = 5000.0
+
+    #: How often a compromised router injects, in milliseconds.
+    #:
+    #: Deliberately **not** tied to ``gossip_interval_ms``, which is what it was
+    #: until the period changed. An attacker does not throttle itself to the
+    #: honest anti-entropy schedule -- ``Adversary._inject_mappings`` pushes
+    #: straight at its victims' agents rather than waiting to be polled -- so
+    #: coupling them meant that lengthening the honest period silently cut the
+    #: attack rate by the same factor. Section 9 would have improved by a factor
+    #: of ten for a reason that has nothing to do with any defence in this work.
+    adversary_interval_ms: float = 500.0
     gossip_fanout: int = 2
     gossip_max_delta: int = 32
     gossip_rumour_push: bool = True
@@ -233,7 +250,8 @@ def run_once(
     churn = ChurnDriver(topology, sim, config.churn)
     adversary = Adversary(
         topology, gossip, config.adversary,
-        interval_ms=config.gossip_interval_ms,
+        # Its own clock, not the honest network's. See adversary_interval_ms.
+        interval_ms=config.adversary_interval_ms,
         targets=[i.name for i in catalog.by_kind(VARIANT)],
     )
     if gossip is not None:

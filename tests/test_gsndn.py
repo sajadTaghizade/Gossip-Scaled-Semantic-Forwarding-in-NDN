@@ -925,3 +925,36 @@ def test_unweighted_observations_are_unchanged_by_the_weighted_estimator():
         plain.observe("/r", obs)
         weighted.observe("/r", Observation(obs.score, obs.correct, obs.at_ms, weight=1.0))
     assert plain.boundary_for("/r") == pytest.approx(weighted.boundary_for("/r"))
+
+
+def test_the_attacker_does_not_slow_down_when_the_honest_network_does():
+    """Lengthening the gossip period must not throttle the adversary.
+
+    The adversary's tick was taken from ``gossip_interval_ms``. Moving the
+    anti-entropy period from 500 ms to 5 s for its byte saving would therefore
+    have cut the injection rate tenfold as a side effect, and §9 would have
+    improved by a factor of ten for a reason unrelated to any defence here.
+    An attacker pushes straight at its victims' agents rather than waiting to be
+    polled, so the two clocks are separate.
+    """
+    from gsndn.adversary import AdversaryConfig
+
+    def injected(gossip_ms):
+        config = ScenarioConfig(
+            strategy="gs-ndn", n_edges=8, threshold=0.6,
+            gossip_interval_ms=gossip_ms,
+            workload=WorkloadConfig(rate_per_s=150, duration_ms=20_000, seed=5),
+            adversary=AdversaryConfig(compromised_share=0.25),
+        ).with_seed(5)
+        return run_once(config).metrics["adv_false_mappings"]
+
+    fast, slow = injected(500.0), injected(5000.0)
+    assert fast == slow, (
+        f"attack rate followed the honest gossip period: {fast} vs {slow}"
+    )
+
+
+def test_the_gossip_period_default_is_the_one_the_ablation_chose():
+    """5 s, not 500 ms. Pinned because the saving is a headline number."""
+    assert ScenarioConfig().gossip_interval_ms == 5000.0
+    assert ScenarioConfig().adversary_interval_ms == 500.0

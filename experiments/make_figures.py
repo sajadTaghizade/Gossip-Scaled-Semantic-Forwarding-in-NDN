@@ -39,6 +39,7 @@ PALETTE = {
     "gs-ndn-no-verify": "#4a3aa7",
     "gs-ndn-anti-entropy-only": "#e34948",
     "gs-ndn-slow-gossip": "#008300",
+    "gs-ndn-fast-gossip": "#8a6d00",
     "sef": "#008300",
     "gs-ndn-robust": "#6a1b9a",
     "gs-ndn-unverified-import": "#b07b2f",
@@ -49,7 +50,7 @@ PALETTE = {
 }
 MARKERS = {
     "vanilla-ndn": "o", "saf": "s", "saf+es": "^", "gs-ndn": "D",
-    "gs-ndn-no-gossip": "v", "gs-ndn-no-verify": "P",    "gs-ndn-anti-entropy-only": "X", "gs-ndn-slow-gossip": "*", "sef": "*",
+    "gs-ndn-no-gossip": "v", "gs-ndn-no-verify": "P",    "gs-ndn-anti-entropy-only": "X", "gs-ndn-slow-gossip": "*", "gs-ndn-fast-gossip": "1", "sef": "*",
     "gs-ndn-robust": "h", "gs-ndn-unverified-import": "<",
     "rc-ndn": ">", "rc-ndn-robust": "p",
 }
@@ -58,6 +59,7 @@ DASHES = {
     "gs-ndn": (None, None), "gs-ndn-no-gossip": (4, 1, 1, 1),
     "gs-ndn-no-verify": (1, 1), "gs-ndn-anti-entropy-only": (6, 2, 1, 2),
     "gs-ndn-slow-gossip": (3, 3),
+    "gs-ndn-fast-gossip": (2, 3),
     "sef": (3, 3),
     "gs-ndn-robust": (None, None), "gs-ndn-unverified-import": (2, 2, 6, 2),
     "rc-ndn": (5, 1, 1, 1), "rc-ndn-robust": (None, None),
@@ -68,6 +70,7 @@ LABELS = {
     "gs-ndn-no-verify": "GS-NDN, no verification",
     "gs-ndn-anti-entropy-only": "GS-NDN, anti-entropy only",
     "gs-ndn-slow-gossip": "GS-NDN, 5 s gossip period",
+    "gs-ndn-fast-gossip": "GS-NDN, 500 ms gossip period",
     "sef": "SEF",
     "gs-ndn-robust": "GS-NDN + reputation (ours)",
     "gs-ndn-unverified-import": "GS-NDN, imports unverified",
