@@ -1,0 +1,146 @@
+%% GS-NDN --- IEEE conference manuscript, 6 pages.
+%%
+%% NUMBERS: every \NUM{} below is a placeholder that must be filled from
+%% results/*.json after the final campaign. Do not hand-copy from README or
+%% RESULTS.md -- both lagged the data at least once already. The intended
+%% workflow is: run the campaign, then fill from JSON, then re-read.
+%%
+%% OPEN DECISION blocking several of these: the gossip period. A 5 s period
+%% sends 28% fewer gossip bytes but costs ~9 points of inference saving at 16
+%% edge routers, which is the headline scaling claim. See EXTENSIONS.md 4.6.
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+
+%% Placeholder macro: renders visibly so an unfilled number cannot reach a PDF
+%% unnoticed. Replace the definition with \newcommand{\NUM}[1]{#1} once filled.
+\newcommand{\NUM}[1]{\textcolor{red}{\textbf{#1}}}
+
+\begin{document}
+
+\title{Gossip-Scaled Semantic Forwarding in Named Data Networking}
+
+\author{\IEEEauthorblockN{Mohammad Mahdi Yari, Sajjad Taghizadeh}
+\IEEEauthorblockA{\textit{Advisor: Dr.\ Mohammadreza Shakournia}}}
+
+\maketitle
+
+\begin{abstract}
+%% TODO after numbers land. Structure, in order:
+%%  1. Exact-match NDN drops a request whose wording differs from the route.
+%%  2. Embedding the name fixes that, at the cost of a transformer in the
+%%     forwarding path; per-router caching does not amortise it, because
+%%     splitting traffic across more routers thins every cache.
+%%  3. We share a resolution, once a Data packet has proved it, over
+%%     anti-entropy gossip.
+%%  4. Result 1, scoped: sharing slows growth of recognition cost with network
+%%     size, by \NUM{X}\% at 16 edge routers, falling to \NUM{Y}\% over a
+%%     10-minute run and reversing below about four edge routers.
+%%  5. Result 2: the feedback a forwarding plane calibrates against is biased,
+%%     not merely noisy -- a producer's refusal conflates a wrong route with a
+%%     wording it never declared -- and we trace it to a specific protocol gap.
+%%  6. Result 3: attributing refusals to the peer that supplied the mapping
+%%     recovers \NUM{Z}\% of what a persistent poisoning attacker costs.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Named Data Networking, semantic forwarding, anti-entropy gossip, conformal
+prediction, Byzantine resilience
+\end{IEEEkeywords}
+
+\section{Introduction}
+%% Frame, then the three contributions, then the honesty paragraph.
+%%
+%% The problem: a client asks for /hospital/temp-sensor/room-101 and the
+%% network knows /smart-hospital/building-a/floor-1/temperature/room-101.
+%%
+%% Contributions, stated at the altitude the evidence supports:
+%%  C1 Sharing a *verified* resolution by gossip, rather than caching it per
+%%     router, is what keeps recognition cost from growing with the network.
+%%     Scoped by horizon and by network size, both measured (Sec.~\ref{sec:scaling}).
+%%  C2 The free labels a forwarding plane calibrates on are biased, and the
+%%     bias has a nameable cause: NDN's Nack has no equivalent of HTTP 406 or
+%%     DNS NODATA (Sec.~\ref{sec:bias}).
+%%  C3 Because a gossiped mapping is falsifiable, a router can audit its peers
+%%     from producer verdicts it already collects -- detection, where the
+%%     Byzantine-gossip literature can only bound influence (Sec.~\ref{sec:threat}).
+%%
+%% Explicitly NOT claimed: edge tagging (SAF's), anti-entropy sync (a decade
+%% old in NDN), learned per-item boundaries under an error bound (vCache).
+
+\section{Background and Related Work}
+%% Semantic forwarding in ICN: Amadeo et al. (the baseline extended here),
+%% Chan et al. Fuzzy Interest Forwarding, Raza et al. INF-NDN.
+%% NDN Sync: ChronoSync, PSync, SVS, NLSR -- why the gossip layer is that
+%% mechanism carrying different payload, not a new mechanism.
+%% Learned boundaries: vCache, Finamore et al., federated conformal prediction.
+%% MNAR feedback: Saito et al. WSDM 2020.
+%% Name collision note: SAF already means Posch et al., ToN 2017.
+
+\section{System Model and Method}
+\label{sec:method}
+%% Simulator: discrete-event, single-server queue per router, costs measured
+%% rather than assumed (encoder \NUM{7.05}ms, cosine search over a 50-entry FIB
+%% \NUM{0.0019}ms). Strategy consulted at exactly one point, the FIB miss, so a
+%% difference in results is a difference in policy.
+%% Producer model: declared schema, not an oracle. alias_coverage.
+%% Gossip: anti-entropy + rumour push; only deltas travel.
+%% Metrics: correctness-aware, four terminal states.
+%% Cross-validation against ndnSIM: median RTT agrees to 0.11ms.
+
+\section{Scaling: Sharing versus Caching}
+\label{sec:scaling}
+%% Table: encoder inferences, 1..16 edge routers, saf / saf+es / gs-ndn.
+%% Then the two scope conditions, both measured and both stated here rather
+%% than left to be discovered: the horizon, and the ~4-edge floor.
+%% Then gs-ndn-full-sync: why more aggressive sync is not the answer.
+%% Then the gossip-period frontier (bytes against inference saving).
+
+\section{Calibrating from Free Labels}
+\label{sec:risk}
+%% Error budget instead of a threshold; why a threshold does not transfer.
+%% The efficiency claim was tested against a transferred threshold and
+%% withdrawn -- report the tally honestly.
+%% Exploration: risk control deadlocks without it.
+
+\section{The Feedback is Biased, Not Just Noisy}
+\label{sec:bias}
+%% The finding this paper stands on alongside Sec.~\ref{sec:scaling}.
+%% A producer's Nack conflates "not mine" with "mine, but not in that wording".
+%% What a producer can decide locally (the instance it is attached to) and what
+%% it genuinely cannot (a metric it does not serve vs a synonym it forgot).
+%% The measured composition of each refusal class at two coverages.
+%% The regime inversion: the right policy flips between coverage regimes and
+%% the operator cannot observe which regime they are in. State as open.
+
+\section{Threat Model and Peer Reputation}
+\label{sec:threat}
+%% Threat model first, explicitly: what the attacker controls, can do, cannot
+%% do, and what structurally limits the damage.
+%% Then: a gossiped mapping is falsifiable, so reputation is available here
+%% where the Byzantine-gossip literature must settle for bounding influence.
+%% Wilson lower bound on peer trust, mirroring the upper bound on error.
+%% Results, and the cost on an honest network (which is the number that decides
+%% whether it can be left switched on).
+
+\section{Limitations}
+%% Synthetic catalogs, and the measurement that sharpens the admission: the
+%% ontology-grounded rewrites score rank-1 \NUM{0.578} on city against
+%% \NUM{0.92} for the synonyms we invented. Our lexicon is easier than
+%% standardised vocabulary, so recognition numbers are an upper bound.
+%% Provenance unimplemented. Compromised producers unmeasured.
+%% The encoder guard is a trade, not a win.
+
+\section{Conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{../references}
+
+\end{document}
