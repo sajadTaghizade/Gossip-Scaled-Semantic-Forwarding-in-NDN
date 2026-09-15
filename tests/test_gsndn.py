@@ -954,7 +954,16 @@ def test_the_attacker_does_not_slow_down_when_the_honest_network_does():
     )
 
 
-def test_the_gossip_period_default_is_the_one_the_ablation_chose():
-    """5 s, not 500 ms. Pinned because the saving is a headline number."""
-    assert ScenarioConfig().gossip_interval_ms == 5000.0
+def test_the_gossip_period_default_leads_on_the_scaling_claim():
+    """500 ms, not 5 s, and the choice is a trade rather than an optimum.
+
+    The ablation at 8 edge routers argues for 5 s -- 28% fewer gossip bytes for
+    3% more encoder work. At 16 edge routers the same change costs 9 points of
+    inference saving (27.7% to 18.5%), because a longer period means routers
+    learn from each other later and that cost scales with the number of them.
+    The default therefore sits where the primary claim is strongest and
+    exp_gossip_period reports the frontier.
+    """
+    assert ScenarioConfig().gossip_interval_ms == 500.0
+    # Still its own clock, whichever period the honest network runs at.
     assert ScenarioConfig().adversary_interval_ms == 500.0

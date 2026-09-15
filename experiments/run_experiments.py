@@ -510,10 +510,10 @@ def exp_ablation(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
         "gs-ndn-unverified-import": {"strategy": "gs-ndn-unverified-import"},
         "gs-ndn-robust": {"strategy": "gs-ndn-robust"},
         "gs-ndn-anti-entropy-only": {"strategy": "gs-ndn", "gossip_rumour_push": False},
-        # The former default. 5 s is now the default, so the arm that keeps
-        # the ablation meaningful is the *fast* one -- otherwise this row
-        # would be gs-ndn compared against itself.
-        "gs-ndn-fast-gossip": {"strategy": "gs-ndn", "gossip_interval_ms": 500.0},
+        # A tenfold longer period. Sends far fewer bytes and encodes more;
+        # exp_gossip_period measures the whole frontier, this row keeps it
+        # visible in the ablation at the main operating point.
+        "gs-ndn-slow-gossip": {"strategy": "gs-ndn", "gossip_interval_ms": 5000.0},
     }
     out: Dict[str, object] = {}
     for domain in bench.catalogs:
@@ -1269,7 +1269,63 @@ def exp_vocabulary(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_gossip_period(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """The anti-entropy period is a frontier, not a setting with a right answer.
+
+    Lengthening it sends fewer gossip bytes and costs inference savings, and the
+    exchange rate between the two is not constant: it depends on how many edge
+    routers are waiting to learn from each other. Measured at 8 edges the trade
+    looks nearly free -- the ablation's 5 s arm sends 28% fewer bytes for 3%
+    more encoder work, which is what first recommended it as a default. At 16
+    edges the same change costs about nine points of inference saving, because
+    a longer period delays every router's learning and that delay is paid once
+    per router.
+
+    So the default sits at 500 ms, where the scaling claim of §2 is strongest,
+    and this sweep is what an operator with different priorities reads instead.
+    Reporting the curve is also the answer to the reviewer who prices our
+    inference saving against the bytes it costs: both axes are here.
+    """
+    periods = (250.0, 500.0, 1000.0, 2000.0, 5000.0)
+    edges = (4, 16)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+        for n_edges in edges:
+            # The per-router cache is the reference both axes are measured
+            # against, and it does not gossip, so it is run once per edge count.
+            reference = aggregate(bench.metrics(
+                base_config(domain, strategy="saf+es", n_edges=n_edges), seeds
+            ))
+            per_period = {"saf+es": reference}
+            for period in periods:
+                config = base_config(
+                    domain, strategy="gs-ndn", n_edges=n_edges,
+                    gossip_interval_ms=period,
+                )
+                per_period[str(period)] = aggregate(bench.metrics(config, seeds))
+            rows[str(n_edges)] = per_period
+        out[domain] = rows
+
+        print(f"\n--- {domain}: gossip period frontier ---")
+        for n_edges in edges:
+            block = rows[str(n_edges)]
+            baseline = block["saf+es"]["encoder_runs"]["mean"]
+            print(f"  {n_edges} edge routers (saf+es reference: {baseline:.0f} inferences)")
+            for period in periods:
+                m = block[str(period)]
+                runs = m["encoder_runs"]["mean"]
+                saving = (baseline - runs) / baseline * 100 if baseline else float("nan")
+                print(
+                    f"    {period / 1000:>5.2f}s  inferences {runs:>7.0f} "
+                    f"(saving {saving:>5.1f}%)   gossip {m['gossip_bytes']['mean']:>9,.0f} B"
+                    f"   ISR {m['isr']['mean']:.4f}"
+                )
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
+    "gossip_period": exp_gossip_period,
     "robust": exp_robust,
     "vocabulary": exp_vocabulary,
     "horizon": exp_horizon,

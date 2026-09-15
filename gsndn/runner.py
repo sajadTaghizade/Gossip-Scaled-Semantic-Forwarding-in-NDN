@@ -70,13 +70,24 @@ class ScenarioConfig:
     churn: ChurnConfig = field(default_factory=ChurnConfig)
     adversary: AdversaryConfig = field(default_factory=AdversaryConfig)
 
-    #: Anti-entropy period. 5 s rather than 500 ms because the ablation says so:
-    #: at a tenfold longer period the same network sends 28% fewer gossip bytes
-    #: over 60 s and 37% fewer over 240 s, converges *further* (coverage 0.868
-    #: against 0.800), and moves satisfaction by 0.001 and encoder work by 2%.
-    #: Rumour push already hands a new mapping to every neighbour within a link
-    #: delay, so a short period buys redundant digests and nothing else.
-    gossip_interval_ms: float = 5000.0
+    #: Anti-entropy period, in milliseconds.
+    #:
+    #: 500 ms, and the reason it is not 5 s is worth recording because the
+    #: ablation argues for 5 s and the ablation is measured at 8 edge routers.
+    #: A longer period does send far fewer gossip bytes -- 28% fewer over 60 s,
+    #: 37% over 240 s -- but routers then learn from each other later and encode
+    #: more, and that cost grows with the number of routers, which is the axis
+    #: the scaling result is about. At 16 edge routers a 5 s period takes
+    #: gs-ndn from 962 encoder runs to 1,084, growth across 1 to 16 edges from
+    #: +9.9% to +23.9%, and the saving against a per-router cache from 27.7% to
+    #: 18.5%.
+    #:
+    #: So the period is a frontier rather than a setting with a right answer,
+    #: and ``exp_gossip_period`` measures it. The default stays where the
+    #: primary claim is strongest; an operator who cares more about gossip
+    #: bytes than about inference cost should lengthen it and can read the
+    #: trade off that sweep.
+    gossip_interval_ms: float = 500.0
 
     #: How often a compromised router injects, in milliseconds.
     #:

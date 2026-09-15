@@ -296,7 +296,7 @@ class GossipProtocol:
         network: "Network",
         sim: Simulator,
         *,
-        interval_ms: float = 5000.0,
+        interval_ms: float = 500.0,
         fanout: int = 2,
         max_delta: int = 32,
         rumour_push: bool = True,
