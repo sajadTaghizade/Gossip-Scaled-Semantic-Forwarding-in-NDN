@@ -318,15 +318,21 @@ The prediction was that weighting an ambiguous refusal by an estimated
 propensity would keep the veto's satisfaction at low coverage while avoiding the
 error it inflates at high coverage. Half of that happened.
 
-| coverage | `rc-ndn` | `rc-ndn-reasons` | `rc-ndn-ips` |
-|---|---|---|---|
-| 1.0 | 0.9591 / 0.0236 | 0.9594 / 0.0381 | **0.9616 / 0.0245** |
-| 0.7 | 0.8442 / 0.0165 | **0.8962** / 0.0302 | 0.8514 / 0.0215 |
-| 0.5 | 0.7754 / 0.0239 | **0.8476** / 0.0253 | 0.7830 / 0.0199 |
+ISR / realised error, 10 seeds, 8 edges, ε = 0.2.
+
+| coverage | domain | `rc-ndn` | `rc-ndn-reasons` | `rc-ndn-ips` |
+|---|---|---|---|---|
+| 1.0 | hospital | 0.9591 / 0.0236 | 0.9594 / 0.0381 | **0.9616** / 0.0245 |
+| 1.0 | city | 0.9764 / 0.0137 | 0.9627 / 0.0274 | **0.9772** / 0.0147 |
+| 0.7 | hospital | 0.8442 / 0.0165 | **0.8962** / 0.0302 | 0.8514 / 0.0215 |
+| 0.7 | city | 0.7764 / 0.0146 | **0.8579** / 0.0226 | 0.7946 / 0.0139 |
+| 0.5 | hospital | 0.7754 / 0.0239 | **0.8476** / 0.0253 | 0.7830 / 0.0199 |
+| 0.5 | city | 0.7099 / 0.0174 | **0.7831** / 0.0210 | 0.7168 / 0.0174 |
 
 It wins at full coverage and is beaten decisively by the plain veto at 0.7 and
-0.5. The diagnosis is in the weight itself: the mean weight is 0.414, 0.428,
-0.450 across the three regimes, when it should move sharply. The estimator
+0.5, on both catalogs. The diagnosis is in the weight itself: the mean weight is
+0.414 to 0.470 across every regime and both domains, when it should move
+sharply. The estimator
 
     pi(c) = served(c) / (served(c) + wording_refusals(c))
 
@@ -338,6 +344,20 @@ wording, not on the route**, and is future work rather than something to claim.
 
 The arm stays in the tree, off by default, reported as measured and not as a
 contribution — the same treatment §6 gives the error budget.
+
+**But the gap it was aimed at is real, and now quantified on both catalogs.**
+Neither fixed policy is safe to ship:
+
+- At full coverage the veto *costs* satisfaction — 0.9627 against 0.9764 on
+  city, a loss of 0.014. (On hospital it reaches parity, 0.9594 against 0.9591,
+  which is why the hospital-only reading of this looked better than it is.)
+- At coverage 0.5 the veto *gains* 0.07 on both catalogs.
+
+So the right policy inverts between two regimes, and the operator does not know
+which regime they are in — declaration coverage is a property of other people's
+service registries. That is a genuine open problem this work can state precisely
+because it has the measurement, and an honest §16 should end there rather than
+on a mechanism that does not yet close it.
 
 ### 4.3 Documentation drift after the regeneration
 
