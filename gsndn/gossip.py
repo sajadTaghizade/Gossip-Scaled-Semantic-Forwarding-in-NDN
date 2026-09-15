@@ -90,6 +90,7 @@ class EvidenceBatch:
 @dataclass
 class GossipStats:
     rounds: int = 0
+    rounds_skipped: int = 0
     digest_exchanges: int = 0
     mappings_sent: int = 0
     mappings_applied: int = 0
@@ -108,6 +109,7 @@ class GossipStats:
     def as_dict(self) -> Dict[str, float]:
         return {
             "gossip_rounds": self.rounds,
+            "gossip_rounds_skipped": self.rounds_skipped,
             "gossip_digest_exchanges": self.digest_exchanges,
             "gossip_mappings_sent": self.mappings_sent,
             "gossip_mappings_applied": self.mappings_applied,
@@ -164,6 +166,13 @@ class GossipAgent:
         #: re-sends its whole recent history every round, and gossip overhead
         #: grows with run length instead of with the number of things learned.
         self.sent_upto: Dict[str, int] = {}
+
+        #: Rounds this router currently waits between anti-entropy attempts,
+        #: and how many it has waited so far. Both are 1 and 0 under the fixed
+        #: schedule, which is what keeps the adaptive path a pure addition.
+        self.backoff = 1
+        self.skipped = 0
+        self.rounds_skipped = 0
 
     def next_version(self) -> int:
         self._version += 1
@@ -291,6 +300,8 @@ class GossipProtocol:
         fanout: int = 2,
         max_delta: int = 32,
         rumour_push: bool = True,
+        adaptive: bool = False,
+        max_backoff: int = 16,
         apply_cost_ms: float = 0.002,
         seed: int = 0,
     ) -> None:
@@ -300,6 +311,10 @@ class GossipProtocol:
         self.fanout = fanout
         self.max_delta = max_delta
         self.rumour_push = rumour_push
+        #: Back the anti-entropy period off per router when its digests keep
+        #: agreeing, instead of paying a fixed period forever.
+        self.adaptive = adaptive
+        self.max_backoff = max_backoff
         self.apply_cost_ms = apply_cost_ms
         self.rng = random.Random(seed)
         self.stats = GossipStats()
@@ -330,6 +345,14 @@ class GossipProtocol:
         if agent is None:
             return
         mapping = agent.publish(entry)
+        # Deliberately *not* resetting the backoff here. Learning something new
+        # locally is not a reason to resume polling neighbours: rumour push
+        # below already hands it to every one of them within a link delay, so
+        # anti-entropy's only remaining job is catching what push did not
+        # deliver. Resetting on every confirmation was the first version of
+        # this and it defeated the mechanism -- confirmations arrive constantly,
+        # the backoff never grew past 1, and the saving was 10.6% instead of the
+        # 28% the fixed 5 s period already achieved.
         if not self.rumour_push:
             return
         for peer_id in router.peers:
@@ -431,27 +454,50 @@ class GossipProtocol:
             agent = self.agents.get(router.id)
             if agent is None or not router.peers:
                 continue
+            if self.adaptive and agent.skipped + 1 < agent.backoff:
+                # Nothing was learned here recently and the last digests all
+                # matched, so this router sits this round out. The ablation is
+                # what motivates it: at a 5 s period instead of 500 ms the same
+                # network sends 28% fewer gossip bytes and converges *further*
+                # (coverage 0.868 against 0.800) for 3% more encoder work,
+                # because rumour push already carries anything new and the
+                # periodic exchange is mostly digests that agree. A fixed
+                # period cannot have it both ways -- fast while the network is
+                # still learning, quiet once it has converged -- so the period
+                # backs off per router instead of being chosen once.
+                agent.skipped += 1
+                agent.rounds_skipped += 1
+                self.stats.rounds_skipped += 1
+                continue
+            agent.skipped = 0
             peers = self.rng.sample(router.peers, min(self.fanout, len(router.peers)))
+            produced = False
             for peer_id in peers:
-                self._exchange(agent, router, peer_id)
+                produced |= self._exchange(agent, router, peer_id)
+            if self.adaptive:
+                # Productive exchange: stay fast, there is more to spread.
+                # Nothing to send: double the wait, up to the cap.
+                agent.backoff = 1 if produced else min(agent.backoff * 2, self.max_backoff)
         self._snapshot()
         self.sim.schedule(self.interval_ms, self._round)
 
-    def _exchange(self, agent: GossipAgent, router: "Router", peer_id: str) -> None:
+    def _exchange(self, agent: GossipAgent, router: "Router", peer_id: str) -> bool:
+        """Returns whether this exchange actually had anything to send."""
         peer = self.agents.get(peer_id)
         if peer is None:
-            return
+            return False
         self.stats.digest_exchanges += 1
         self.stats.bytes_sent += 2 * DIGEST_BYTES
 
         delta = agent.delta_for(peer_id, peer.local_digest(), self.max_delta)
         if not delta:
-            return
+            return False
         agent.mark_sent(peer_id, delta)
         payload = sum(m.wire_bytes for m in delta)
         self.stats.mappings_sent += len(delta)
         self.stats.bytes_sent += payload
         self.sim.schedule(self._link_delay(router, peer_id), self._receive, peer, delta)
+        return True
 
     def _receive(self, agent: GossipAgent, mappings: List[Mapping]) -> None:
         router = agent.router

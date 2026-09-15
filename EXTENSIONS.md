@@ -282,3 +282,104 @@ the CLI level. Measured speedup on four workers: 3.05x.
 
 `make_figures.py` now draws `fig_robust` and `fig_vocabulary` alongside the
 existing eight.
+
+---
+
+## 4. Audit of the 20-seed campaign (2026-09-15)
+
+### 4.1 The refusal reason carried almost no information — fixed
+
+See the commit "Let a producer say which of the two refusals it is". In short:
+the producer tested whether it published *the prefix the router chose*, which a
+misroute satisfies by construction. At `alias_coverage=1.0`, 132 of 157 refusals
+labelled `unknown-wording` were plain misroutes, 2 were the case the label
+exists for, and `no-such-service` never fired once in the whole run.
+
+That is why `main` put `gs-ndn-reasons` at 0.932 — exactly `saf+es` — with more
+retractions and more encoder runs than the arm it was meant to improve.
+
+Fixed by letting the producer decide from the one thing it genuinely knows: the
+instance it is attached to. Effect at 10 seeds, hospital:
+
+| coverage | `rc-ndn` | `rc-ndn-reasons` before | after |
+|---|---:|---:|---:|
+| 1.0 | 0.959 | 0.951 | **0.959** |
+| 0.7 | 0.844 | 0.884 | **0.896** |
+| 0.5 | 0.775 | 0.839 | **0.848** |
+
+And the mechanism §16 predicted is now visible rather than buried: at coverage
+0.5, `gs-ndn` realises 0.0735 error against `gs-ndn-reasons`' 0.0217 at the same
+satisfaction, because an incomplete declaration no longer turns a correct route
+into a misdelivery.
+
+### 4.2 `rc-ndn-ips` — falsified as specified, kept as a measured component
+
+The prediction was that weighting an ambiguous refusal by an estimated
+propensity would keep the veto's satisfaction at low coverage while avoiding the
+error it inflates at high coverage. Half of that happened.
+
+| coverage | `rc-ndn` | `rc-ndn-reasons` | `rc-ndn-ips` |
+|---|---|---|---|
+| 1.0 | 0.9591 / 0.0236 | 0.9594 / 0.0381 | **0.9616 / 0.0245** |
+| 0.7 | 0.8442 / 0.0165 | **0.8962** / 0.0302 | 0.8514 / 0.0215 |
+| 0.5 | 0.7754 / 0.0239 | **0.8476** / 0.0253 | 0.7830 / 0.0199 |
+
+It wins at full coverage and is beaten decisively by the plain veto at 0.7 and
+0.5. The diagnosis is in the weight itself: the mean weight is 0.414, 0.428,
+0.450 across the three regimes, when it should move sharply. The estimator
+
+    pi(c) = served(c) / (served(c) + wording_refusals(c))
+
+measures how often a route succeeds, not how likely a given refusal is a
+genuine vocabulary gap. At low coverage a *correct* route both serves often and
+is refused often, so the ratio barely moves and the weight under-discounts
+exactly where the veto is right. **The right estimator conditions on the
+wording, not on the route**, and is future work rather than something to claim.
+
+The arm stays in the tree, off by default, reported as measured and not as a
+contribution — the same treatment §6 gives the error budget.
+
+### 4.3 Documentation drift after the regeneration
+
+`README.md` and `RESULTS.md` still carry pre-regeneration numbers. Confirmed
+mismatches, all needing an edit before the paper quotes them:
+
+| claim | states | measured |
+|---|---|---|
+| drift, hospital | +0.0052 ± 0.0013, 20/20 | **+0.0042 ± 0.0018, 16/20** |
+| drift, city | +0.0101 ± 0.0036 | **+0.0124 ± 0.0045, 19/20** |
+| transfer tally | "dominates in four" | **seven** |
+| horizon at 600 s | 7.5% saving | **6.5%** hospital, **9.2%** city |
+
+### 4.4 Two results that need reporting rather than fixing
+
+**The invented synonyms are easier than the standardised ones.** On `city`, the
+`ontology` rewrite family — terms transcribed from Brick, SAREF, Haystack and
+SSN — scores rank-1 **0.578**, against **0.92** for the synonyms we wrote. On
+hospital it is 0.80 against 0.88. §14's admission that "we may have invented
+synonyms the encoder happens to be good at" is *confirmed* by the grounded
+catalogs, not removed by them, and every headline recognition number should be
+read as an upper bound because of it.
+
+**The encoder guard is a trade, not a win.** `rc-ndn-naive-mix` beats the
+guarded `rc-ndn` on satisfaction at every heterogeneous share (0.951 vs 0.948,
+0.932 vs 0.930 on hospital) while realising more error (0.0266 vs 0.0228). For
+an error-budget system that trade is defensible, but §10 must not describe the
+guard as a clean improvement.
+
+### 4.5 Gossip overhead, and what the ablation already says about it
+
+Gossip costs ~439 kB per 60 s run at 8 edges, roughly a tenth of total traffic —
+a reviewer will price the 25% inference saving against it. The ablation already
+contains the answer, and it is not flattering to the chosen design point:
+
+| arm (hospital) | gossip bytes | coverage | encoder runs | ISR |
+|---|---:|---:|---:|---:|
+| `gs-ndn`, 500 ms | 439,055 | 0.800 | 1623 | 0.941 |
+| `gs-ndn-slow-gossip`, 5 s | **314,364** | **0.868** | 1672 | 0.940 |
+| `gs-ndn-anti-entropy-only` | 405,391 | 0.637 | 1702 | 0.940 |
+
+A tenfold slower period sends 28% fewer bytes, converges *further*, and costs 3%
+more encoder work and 0.001 satisfaction. The 500 ms period is not justified by
+our own data. `gossip_adaptive` backs the period off per router while a router's
+digests keep agreeing; it is implemented and under evaluation.
