@@ -64,6 +64,7 @@ def build_strategy(
     confidence: float = 0.9,
     explore_rate: float = 0.05,
     adapt_rate: float = 0.05,
+    trust_min_claims: int = 4,
 ) -> ForwardingStrategy:
     """Instantiate a strategy by registry key."""
     if name == "vanilla-ndn":
@@ -101,13 +102,15 @@ def build_strategy(
         strategy.name = "gs-ndn-unverified-import"
         return strategy
     if name == "gs-ndn-robust":
-        strategy = GsNdn(threshold, costs, robust=True, verify_imported=True)
+        strategy = GsNdn(threshold, costs, robust=True, verify_imported=True,
+                         trust_min_claims=trust_min_claims)
         strategy.name = "gs-ndn-robust"
         return strategy
     if name == "rc-ndn-robust":
         strategy = RiskControlledNdn(
             threshold, costs, epsilon=epsilon, confidence=confidence,
             explore_rate=explore_rate, robust=True, verify_imported=True,
+            trust_min_claims=trust_min_claims,
         )
         strategy.name = "rc-ndn-robust"
         return strategy

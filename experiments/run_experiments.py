@@ -1324,7 +1324,105 @@ def exp_gossip_period(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_breakdown(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Is the residual damage under attack a bound, or the start of a collapse?
+
+    §9's defended arm still loses ground as the compromised share rises --
+    realised error goes 0.026, 0.037, 0.044, 0.053 across 0 to 50% on hospital
+    -- and a reviewer is entitled to ask whether that is a mechanism breaking
+    down slowly or a fixed price being paid more often.
+
+    The counters already say it is the second. Injections scale exactly with
+    the compromised share (544, 1088, 2176) while poison that survives grows
+    1.00, 1.36, 1.46, and the number of peers actually distrusted rises
+    linearly. Nothing is failing to detect; something fixed is being paid per
+    detection.
+
+    That fixed thing is ``trust_min_claims``. A peer's trust cannot fall below
+    the floor until it has been judged that many times, so each pair of an
+    honest router and a compromised neighbour admits at most that many mappings
+    before the liar is cut off, whatever it does afterwards. With E
+    adjacencies and a compromised fraction f, honest-compromised pairs number
+    about 2Ef(1-f), so
+
+        admitted poison  <=  2 E f (1-f) * trust_min_claims
+
+    which is quadratic in f, maximised at f = 0.5, and -- the part worth
+    testing -- independent of how fast the attacker injects.
+
+    Two sweeps, each able to falsify that:
+
+    *Admission.* Vary ``trust_min_claims``. If the residual is an admission fee
+    it scales with the fee. If it is a breakdown, the fee is irrelevant and the
+    curve is flat.
+
+    *Rate invariance.* Vary ``false_mappings_per_round`` at a fixed compromised
+    share. A bound in pairs does not move when the rate moves; a mechanism
+    being overwhelmed does. The undefended arm is run alongside precisely
+    because it *should* move, which is what makes a flat defended curve mean
+    something rather than being a property of the workload.
+    """
+    share = 0.25
+    claims = (1, 2, 4, 8, 16)
+    rates = (1, 2, 4, 8, 16)
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        rows: Dict[str, object] = {}
+
+        admission = {}
+        for n in claims:
+            config = base_config(
+                domain, strategy="gs-ndn-robust", epsilon=0.2, n_edges=8,
+                trust_min_claims=n,
+                adversary=AdversaryConfig(compromised_share=share),
+            )
+            admission[str(n)] = aggregate(bench.metrics(config, seeds))
+        rows["admission"] = admission
+
+        invariance: Dict[str, object] = {}
+        for strategy in ("gs-ndn", "gs-ndn-robust"):
+            per_rate = {}
+            for rate in rates:
+                config = base_config(
+                    domain, strategy=strategy, epsilon=0.2, n_edges=8,
+                    adversary=AdversaryConfig(
+                        compromised_share=share, false_mappings_per_round=rate
+                    ),
+                )
+                per_rate[str(rate)] = aggregate(bench.metrics(config, seeds))
+            invariance[strategy] = per_rate
+        rows["rate_invariance"] = invariance
+        out[domain] = rows
+
+        print(f"\n--- {domain}: admission fee (trust_min_claims), f = {share} ---")
+        base = admission[str(claims[0])]["risk_realised_error"]["mean"]
+        for n in claims:
+            m = admission[str(n)]
+            err = m["risk_realised_error"]["mean"]
+            print(
+                f"    min_claims {n:>3}  err {err:.4f} ({err / base:>4.2f}x)  "
+                f"poison live {m['adv_poison_live']['mean']:>6.0f}  "
+                f"distrusted {m['rep_peers_distrusted']['mean']:>5.1f}  "
+                f"ISR {m['isr']['mean']:.4f}"
+            )
+
+        print(f"\n--- {domain}: rate invariance, f = {share} ---")
+        for strategy in ("gs-ndn", "gs-ndn-robust"):
+            first = invariance[strategy][str(rates[0])]["risk_realised_error"]["mean"]
+            cells = []
+            for rate in rates:
+                m = invariance[strategy][str(rate)]
+                err = m["risk_realised_error"]["mean"]
+                cells.append(f"{rate}:{err:.4f}({err / first:.2f}x)")
+            injected = invariance[strategy][str(rates[-1])]["adv_false_mappings"]["mean"]
+            print(f"    {strategy:<16} {'  '.join(cells)}")
+            print(f"    {'':16} (at rate {rates[-1]} the attacker injected "
+                  f"{injected:,.0f} mappings)")
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
+    "breakdown": exp_breakdown,
     "gossip_period": exp_gossip_period,
     "robust": exp_robust,
     "vocabulary": exp_vocabulary,

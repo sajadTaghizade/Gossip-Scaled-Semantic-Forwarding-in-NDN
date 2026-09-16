@@ -99,6 +99,11 @@ class ScenarioConfig:
     #: attack rate by the same factor. Section 9 would have improved by a factor
     #: of ten for a reason that has nothing to do with any defence in this work.
     adversary_interval_ms: float = 500.0
+
+    #: Judged claims a peer gets before its trust can fall below the floor.
+    #: The admission fee an attacker pays per victim, and the term the
+    #: breakdown bound of exp_breakdown is written in.
+    trust_min_claims: int = 4
     gossip_fanout: int = 2
     gossip_max_delta: int = 32
     gossip_rumour_push: bool = True
@@ -210,6 +215,7 @@ def run_once(
         config.strategy, threshold=config.threshold, costs=costs, seed=config.seed,
         epsilon=config.epsilon, confidence=config.risk_confidence,
         explore_rate=config.explore_rate, adapt_rate=config.adapt_rate,
+        trust_min_claims=config.trust_min_claims,
     )
     gossip: Optional[GossipProtocol] = None
     if getattr(strategy, "gossip", False):

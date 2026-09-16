@@ -72,6 +72,7 @@ class RiskControlledNdn(GsNdn):
         robust: bool = False,
         verify_imported: bool = True,
         propensity_weighted: bool = False,
+        trust_min_claims: int = 4,
     ) -> None:
         # The threshold survives only as the prior for routes with no evidence,
         # which is what makes this strictly a superset of the fixed-threshold
@@ -79,7 +80,7 @@ class RiskControlledNdn(GsNdn):
         super().__init__(
             threshold, costs, verify=verify, gossip=gossip,
             reason_aware=reason_aware, robust=robust,
-            verify_imported=verify_imported,
+            verify_imported=verify_imported, trust_min_claims=trust_min_claims,
         )
         self.epsilon = epsilon
         #: Whether calibration observations travel between routers. Off for the

@@ -53,7 +53,12 @@ from ..packets import (
     OUTCOME_TAGGED,
     SemanticTag,
 )
-from ..reputation import DEFAULT_FLOOR, DEFAULT_PEER_SHARE, ReputationTable
+from ..reputation import (
+    DEFAULT_FLOOR,
+    DEFAULT_PEER_SHARE,
+    MIN_CLAIMS,
+    ReputationTable,
+)
 from ..tables import EsEntry, PendingMapping
 from .base import ForwardingStrategy
 
@@ -210,6 +215,7 @@ class GsNdn(Saf):
         verify_imported: bool = True,
         trust_floor: float = DEFAULT_FLOOR,
         peer_share: float = DEFAULT_PEER_SHARE,
+        trust_min_claims: int = MIN_CLAIMS,
     ) -> None:
         super().__init__(threshold, costs)
         #: Retract mappings a Nack disproves, and only gossip proven ones.
@@ -225,7 +231,8 @@ class GsNdn(Saf):
         self.imported_retracted = 0
         self.reputations: Dict[str, ReputationTable] = {}
         self._reputation_defaults = dict(
-            floor=trust_floor, confidence=0.9, peer_share=peer_share
+            floor=trust_floor, confidence=0.9, peer_share=peer_share,
+            min_claims=trust_min_claims,
         )
         #: Read the producer's refusal reason instead of treating every refusal
         #: as a refutation. Off by default, because every result published
