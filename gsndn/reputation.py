@@ -81,7 +81,18 @@ from .risk import _z_for
 #: many free lies per victim per identity, after which its trust collapses and
 #: stays collapsed. Against the persistent re-injecting attacker of §9 that is
 #: a fixed cost paid once, not a per-round cost.
-MIN_CLAIMS = 4
+#:
+#: Two rather than four, taken from the sweep in ``exp_breakdown`` rather than
+#: from intuition. At a compromised share of 0.25 a fee of 2 realises 0.0374
+#: error against 4's 0.0437, and on an honest network it falsely distrusts 1.1
+#: peers against 0.4, costing 0.06% more encoder work -- inside the noise.
+#:
+#: A fee of 1 is better still under attack (0.0340) and is not worth taking: a
+#: single good-faith misroute then collapses a peer's trust outright, so 10.9
+#: honest peers end up distrusted on a clean network and sharing degrades by
+#: 3%. The honest-network control is what makes that visible; the attack
+#: numbers alone would have argued for 1.
+MIN_CLAIMS = 2
 
 #: Trust below which a peer's mappings stop being installed.
 DEFAULT_FLOOR = 0.5

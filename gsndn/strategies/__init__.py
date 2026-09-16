@@ -64,7 +64,7 @@ def build_strategy(
     confidence: float = 0.9,
     explore_rate: float = 0.05,
     adapt_rate: float = 0.05,
-    trust_min_claims: int = 4,
+    trust_min_claims: int = 2,
 ) -> ForwardingStrategy:
     """Instantiate a strategy by registry key."""
     if name == "vanilla-ndn":

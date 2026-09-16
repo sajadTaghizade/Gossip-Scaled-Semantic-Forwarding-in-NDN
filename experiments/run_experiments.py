@@ -1421,7 +1421,81 @@ def exp_breakdown(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
     return out
 
 
+def exp_targeted_gossip(bench: Bench, seeds: Sequence[int]) -> Dict[str, object]:
+    """Does choosing partners by pending delta move the frontier, or slide it?
+
+    Every gossip knob measured so far trades one axis for the other: a longer
+    period sends fewer bytes and removes fewer inferences, and ``exp_gossip_period``
+    traces that curve. A mechanism is only interesting here if it lands *off*
+    that curve -- more inferences removed at fewer bytes than any period
+    achieves.
+
+    The mechanism: uniform peer choice spends most exchanges on neighbours that
+    are already up to date, because once the network converges the modal
+    exchange is two agreeing digests. Ranking by how far behind a peer is
+    spends them where something is actually pending. The ranking needs no
+    messages -- it is read off the watermark the sender already keeps.
+
+    Run over the same periods as the baseline so the comparison is a
+    displacement of one curve against another rather than two points.
+    Falsified if the targeted curve fails to dominate at 16 edges: matching
+    bytes for the same saving would mean the exchanges it redirected were not
+    the ones that mattered.
+    """
+    periods = (250.0, 500.0, 1000.0, 2000.0, 5000.0)
+    n_edges = 16
+    out: Dict[str, object] = {}
+    for domain in bench.catalogs:
+        reference = aggregate(bench.metrics(
+            base_config(domain, strategy="saf+es", n_edges=n_edges), seeds
+        ))
+        rows: Dict[str, object] = {"saf+es": reference}
+        for targeted in (False, True):
+            per_period = {}
+            for period in periods:
+                config = base_config(
+                    domain, strategy="gs-ndn", n_edges=n_edges,
+                    gossip_interval_ms=period, gossip_targeted=targeted,
+                )
+                per_period[str(period)] = aggregate(bench.metrics(config, seeds))
+            rows["targeted" if targeted else "uniform"] = per_period
+        out[domain] = rows
+
+        baseline = reference["encoder_runs"]["mean"]
+        print(f"\n--- {domain}: peer selection at {n_edges} edges "
+              f"(saf+es reference {baseline:.0f} inferences) ---")
+        for policy in ("uniform", "targeted"):
+            print(f"  {policy}")
+            for period in periods:
+                m = rows[policy][str(period)]
+                runs = m["encoder_runs"]["mean"]
+                saving = (baseline - runs) / baseline * 100 if baseline else float("nan")
+                print(
+                    f"    {period / 1000:>5.2f}s  saving {saving:>5.1f}%  "
+                    f"bytes {m['gossip_bytes']['mean']:>9,.0f}  "
+                    f"ISR {m['isr']['mean']:.4f}  cov {m['gossip_coverage']['mean']:.3f}"
+                )
+        print("  displacement (targeted - uniform), per period")
+        for period in periods:
+            u = rows["uniform"][str(period)]
+            t = rows["targeted"][str(period)]
+            d_save = (u["encoder_runs"]["mean"] - t["encoder_runs"]["mean"]) / baseline * 100
+            d_bytes = (
+                (t["gossip_bytes"]["mean"] - u["gossip_bytes"]["mean"])
+                / u["gossip_bytes"]["mean"] * 100
+            )
+            verdict = (
+                "dominates" if d_save > 0 and d_bytes < 0
+                else "dominated" if d_save < 0 and d_bytes > 0
+                else "trade"
+            )
+            print(f"    {period / 1000:>5.2f}s  saving {d_save:+5.2f} pts  "
+                  f"bytes {d_bytes:+6.1f}%   -> {verdict}")
+    return out
+
+
 EXPERIMENTS: Dict[str, Callable[[Bench, Sequence[int]], Dict[str, object]]] = {
+    "targeted_gossip": exp_targeted_gossip,
     "breakdown": exp_breakdown,
     "gossip_period": exp_gossip_period,
     "robust": exp_robust,

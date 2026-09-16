@@ -228,6 +228,47 @@ class GossipAgent:
         )
         return fresh[:limit]
 
+    def pending_for(self, peer_id: str) -> int:
+        """How many mappings this peer has not been sent yet.
+
+        Computed from the watermark this router already keeps, so it costs no
+        messages and asks the peer nothing -- the number is a property of what
+        *we* have sent, not of what they hold.
+        """
+        watermark = self.sent_upto.get(peer_id, 0)
+        return sum(1 for m in self.known.values() if m.version > watermark)
+
+    def rank_peers(self, peers: Sequence[str], fanout: int, rng: random.Random) -> List[str]:
+        """Choose whom to reconcile with, by who is furthest behind.
+
+        Uniform peer choice spends most of its exchanges on neighbours that are
+        already up to date: once the network has converged, the modal exchange
+        is two matching digests and no payload. Ranking by pending delta spends
+        them where there is something to send instead, which shortens the tail
+        of the propagation delay that §2's residual growth is made of.
+
+        **One pick stays uniform.** Epidemic protocols reach everyone in
+        O(log N) rounds because peer choice is random; a purely greedy rule is
+        no longer an epidemic process and can starve a peer that never tops the
+        ranking, which would trade a bounded propagation time for an unbounded
+        one. Keeping one random pick preserves the argument, and costs one
+        exchange out of ``fanout``.
+
+        Ties break on peer id so the choice is a function of the scenario and
+        not of dictionary order -- the determinism rule the campaign is held to.
+        """
+        available = min(fanout, len(peers))
+        if available <= 0:
+            return []
+        ranked = sorted(peers, key=lambda p: (-self.pending_for(p), p))
+        if available == 1:
+            return ranked[:1]
+        chosen = list(ranked[: available - 1])
+        remainder = [p for p in peers if p not in chosen]
+        if remainder:
+            chosen.append(remainder[rng.randrange(len(remainder))])
+        return chosen
+
     def mark_sent(self, peer_id: str, mappings: Sequence[Mapping]) -> None:
         if mappings:
             highest = max(m.version for m in mappings)
@@ -300,6 +341,7 @@ class GossipProtocol:
         fanout: int = 2,
         max_delta: int = 32,
         rumour_push: bool = True,
+        targeted: bool = False,
         adaptive: bool = False,
         max_backoff: int = 16,
         apply_cost_ms: float = 0.002,
@@ -311,6 +353,9 @@ class GossipProtocol:
         self.fanout = fanout
         self.max_delta = max_delta
         self.rumour_push = rumour_push
+        #: Choose reconciliation partners by pending delta rather than
+        #: uniformly, keeping one random pick. See GossipAgent.rank_peers.
+        self.targeted = targeted
         #: Back the anti-entropy period off per router when its digests keep
         #: agreeing, instead of paying a fixed period forever.
         self.adaptive = adaptive
@@ -470,7 +515,11 @@ class GossipProtocol:
                 self.stats.rounds_skipped += 1
                 continue
             agent.skipped = 0
-            peers = self.rng.sample(router.peers, min(self.fanout, len(router.peers)))
+            peers = (
+                agent.rank_peers(router.peers, self.fanout, self.rng)
+                if self.targeted
+                else self.rng.sample(router.peers, min(self.fanout, len(router.peers)))
+            )
             produced = False
             for peer_id in peers:
                 produced |= self._exchange(agent, router, peer_id)

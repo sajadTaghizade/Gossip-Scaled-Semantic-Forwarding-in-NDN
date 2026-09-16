@@ -72,7 +72,7 @@ class RiskControlledNdn(GsNdn):
         robust: bool = False,
         verify_imported: bool = True,
         propensity_weighted: bool = False,
-        trust_min_claims: int = 4,
+        trust_min_claims: int = 2,
     ) -> None:
         # The threshold survives only as the prior for routes with no evidence,
         # which is what makes this strictly a superset of the fixed-threshold

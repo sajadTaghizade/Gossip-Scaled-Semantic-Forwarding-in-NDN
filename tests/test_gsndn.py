@@ -967,3 +967,40 @@ def test_the_gossip_period_default_leads_on_the_scaling_claim():
     assert ScenarioConfig().gossip_interval_ms == 500.0
     # Still its own clock, whichever period the honest network runs at.
     assert ScenarioConfig().adversary_interval_ms == 500.0
+
+
+def test_targeted_gossip_picks_the_peer_furthest_behind_and_keeps_one_random():
+    """Ranking must be exact, and must not become purely greedy.
+
+    A greedy rule is no longer an epidemic process: a peer that never tops the
+    ranking can starve, trading a bounded O(log N) propagation time for an
+    unbounded one. One uniform pick out of ``fanout`` preserves the argument.
+    """
+    import random
+
+    from gsndn.gossip import GossipAgent, Mapping
+
+    agent = GossipAgent.__new__(GossipAgent)
+    agent.known = {
+        f"v{i}": Mapping(f"v{i}", "/c", 0.9, i + 1, "r0") for i in range(10)
+    }
+    agent.sent_upto = {"a": 10, "b": 0, "c": 5, "d": 3}
+    peers = ["a", "b", "c", "d"]
+
+    assert [agent.pending_for(p) for p in peers] == [0, 10, 5, 7]
+    # b is furthest behind and must always be taken first.
+    for seed in range(8):
+        picked = agent.rank_peers(peers, 2, random.Random(seed))
+        assert picked[0] == "b"
+        assert len(picked) == 2 and len(set(picked)) == 2
+    # The second slot is the random one, so across seeds it must vary --
+    # otherwise the rule has gone greedy and the epidemic argument is lost.
+    second = {agent.rank_peers(peers, 2, random.Random(s))[1] for s in range(20)}
+    assert len(second) > 1, f"second pick never varied: {second}"
+    # Ties break on id, not on dict order, so the choice is reproducible.
+    agent.sent_upto = {p: 0 for p in peers}
+    assert agent.rank_peers(peers, 3, random.Random(0))[:2] == ["a", "b"]
+
+
+def test_targeted_gossip_is_off_by_default():
+    assert ScenarioConfig().gossip_targeted is False

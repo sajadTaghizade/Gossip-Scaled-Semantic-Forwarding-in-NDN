@@ -103,10 +103,12 @@ class ScenarioConfig:
     #: Judged claims a peer gets before its trust can fall below the floor.
     #: The admission fee an attacker pays per victim, and the term the
     #: breakdown bound of exp_breakdown is written in.
-    trust_min_claims: int = 4
+    trust_min_claims: int = 2
     gossip_fanout: int = 2
     gossip_max_delta: int = 32
     gossip_rumour_push: bool = True
+    #: Bias reconciliation toward peers with the largest pending delta.
+    gossip_targeted: bool = False
     #: Back off a router's anti-entropy period while its digests keep agreeing.
     gossip_adaptive: bool = False
     gossip_max_backoff: int = 16
@@ -225,6 +227,7 @@ def run_once(
             fanout=config.gossip_fanout,
             max_delta=config.gossip_max_delta,
             rumour_push=config.gossip_rumour_push,
+            targeted=config.gossip_targeted,
             adaptive=config.gossip_adaptive,
             max_backoff=config.gossip_max_backoff,
             apply_cost_ms=costs.gossip_apply_ms_per_entry,
