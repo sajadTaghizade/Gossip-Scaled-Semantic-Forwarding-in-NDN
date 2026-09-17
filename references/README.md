@@ -134,3 +134,25 @@ boundary learned online against an operator-set error budget.
 - **RFC 7945.** *ICN: Evaluation and Security Considerations.* IRTF — the
   community's own statement that ICN lacks deployment traces, which is the
   standing defence for simulation-only evaluation.
+
+## Verification status, 2026-09-17
+
+Three entries were read from the PDFs in `papers/` and their details are
+confirmed rather than assembled from search results:
+
+- **Amadeo et al.**, *Enhancing IoT Service Discovery Through Semantic
+  Name-Based Forwarding*, IEEE Internet of Things Magazine, vol. 9 no. 2,
+  pp. 142-148, March 2026, doi 10.1109/MIOT.2025.3587052. Authors are
+  Amadeo, Serrano, Molinaro, Nitti and Ruggeri.
+- **Raza et al.**, *INF-NDN IoT*, IEEE Access vol. 12, 2024, doi
+  10.1109/ACCESS.2024.3444903. Authors are Raza, Ullah, Din, Rehman and
+  Kim -- the earlier citation had the wrong first author.
+- **Askar et al.**, *SEF: A Smart and Energy-Aware Forwarding Strategy for
+  NDN-Based Internet of Healthcare*, CMC 2024, doi 10.32604/cmc.2024.058607.
+  The full title says "Internet of Healthcare"; earlier drafts shortened it
+  to "smart energy-efficient forwarding", which is not the paper's title.
+
+The eleven references added to `paper/paper.tex` on 2026-09-17 (NDN
+architecture, sentence encoders, epidemic algorithms, conformal prediction,
+ICN content poisoning) are **unverified**: they were written from knowledge,
+not read. Check each venue and year before submission.

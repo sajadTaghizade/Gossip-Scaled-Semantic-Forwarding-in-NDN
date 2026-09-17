@@ -4,7 +4,11 @@
 %% campaign, not copied from README.md or RESULTS.md. Both of those lagged the
 %% data at least once during development, which is why the rule exists.
 %%
-%% Figures are the ones make_figures.py writes into ../results/figures/.
+%% Figures live in paper/figures/; refresh them with
+%%     python experiments/make_figures.py --sync-paper
+%% Setup, metrics and catalog construction replicate Amadeo et al. (IEEE IoT
+%% Magazine, Mar 2026); see the comparison-basis subsection for what is
+%% deliberately stricter and why absolute numbers are not compared.
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 
@@ -255,6 +259,44 @@ Scoring is correctness-aware. Every Interest ends in exactly one of
 against ground truth the routers never see. A single accuracy number would
 reward a strategy that answers nothing, since distractors are supposed to be
 rejected, so precision, recall and false-positive rate are reported separately.
+
+\subsection{Comparison basis}
+\label{sec:basis}
+
+Because the baseline is what this work extends, we reproduce its evaluation
+setting rather than inventing one. The access-edge topology, the one-way
+latencies (10\,ms client-to-router, 20\,ms router-to-provider), the FIB of 50
+entries, the request rates of 30--300 Interests/s, the Zipf skew of $1.2$, a
+disabled Content Store and an unbounded PIT are all taken from
+Amadeo \emph{et al.}~\cite{amadeo2026}. Our catalogs share their construction
+exactly: 50 services, each with one canonical name and six rewordings, giving
+350 satisfiable names, plus an equal number of unrelated names---their harder
+configuration, in which half the offered catalog cannot be served by anything.
+
+We report their metrics. \emph{Service discovery time} is our
+Interest-satisfaction time and decomposes identically into client-to-router,
+queueing, processing and router-to-provider components. \emph{Processing time}
+is our encoder invocation count multiplied by the measured inference cost, plus
+queueing. Their \emph{share of Interests forwarded successfully on the first
+attempt} is our satisfaction rate, with one deliberate difference stated
+plainly: they count an Interest as successful when it is forwarded and answered,
+while we additionally require the Data to have come from the service the name
+should resolve to. A confident match to the wrong room's sensor is a success
+under the first definition and a misdelivery under ours. We use the stricter one
+because a forwarding plane that resolves names semantically can fail in exactly
+that way, and a metric that cannot see the failure cannot be used to tune
+against it.
+
+\textbf{Absolute numbers are therefore not comparable across the two papers,
+and we do not compare them.} Amadeo \emph{et al.} report essentially complete
+forwarding at $\mathrm{Th}=0.7$ on their catalog; at the same threshold ours
+yields recall of $0.866$ and $0.804$. The gap is a property of the rewordings,
+not of the method: their variations are synonym substitutions, whereas our six
+rewrite families also drop levels of hierarchy, reorder components and
+abbreviate them, and a seventh family draws terms from published IoT
+vocabularies. Ours is a harder instance of the same catalog design. Every
+comparison in this paper is therefore between strategies measured inside one
+harness, never between our numbers and a published one.
 
 \subsection{Cross-validation}
 
@@ -611,7 +653,10 @@ is what makes that visible---the attack column alone would have argued for $1$.
 \textbf{Latency under load} (Fig.~\ref{fig:rate}). Encoding on every FIB miss
 saturates the forwarding path: p95 round-trip time rises from $79$ to $172$\,ms
 between 30 and 300 Interests/s, while cached and gossiped variants stay flat at
-$78$--$83$\,ms.
+$78$--$83$\,ms. The knee sits just past 200 Interests/s, which independently
+reproduces the bottleneck Amadeo \emph{et al.} report beyond roughly 210
+Interests/s for the same encoder---a point of agreement we did not tune for and
+that we take as evidence the cost model is calibrated correctly.
 
 \textbf{Energy.} On the radio model of Askar \emph{et al.}~\cite{askar2024sef},
 with encoder energy charged at measured CPU draw, GS-NDN uses $634$\,J against
@@ -695,13 +740,16 @@ thereafter.}
 \end{figure}
 
 \begin{thebibliography}{99}
-\bibitem{amadeo2026} M.~Amadeo \emph{et al.}, ``Enhancing IoT service discovery
-through semantic name-based forwarding,'' \emph{IEEE Internet Things Mag.}, 2026.
+\bibitem{amadeo2026} M.~Amadeo, S.~Serrano, A.~Molinaro, M.~Nitti, and
+G.~Ruggeri, ``Enhancing IoT service discovery through semantic name-based
+forwarding,'' \emph{IEEE Internet Things Mag.}, vol.~9, no.~2, pp.~142--148,
+Mar.\ 2026, doi: 10.1109/MIOT.2025.3587052.
 \bibitem{chan2017fuzzy} K.~Chan \emph{et al.}, ``Fuzzy Interest forwarding,'' in
 \emph{Proc. AINTEC}, 2017.
-\bibitem{raza2024infndn} S.~M.~Raza \emph{et al.}, ``INF-NDN IoT: an intelligent
-naming and forwarding in named data networking for Internet of Things,''
-\emph{IEEE Access}, 2024.
+\bibitem{raza2024infndn} G.~M.~Raza, I.~Ullah, M.~S.~U.~Din, M.~A.~U.~Rehman,
+and B.-S.~Kim, ``INF-NDN IoT: an intelligent naming and forwarding in name data
+networking for Internet of Things,'' \emph{IEEE Access}, vol.~12, 2024, doi:
+10.1109/ACCESS.2024.3444903.
 \bibitem{posch2017saf} D.~Posch, B.~Rainer, and H.~Hellwagner, ``SAF: stochastic
 adaptive forwarding in named data networking,'' \emph{IEEE/ACM Trans. Netw.},
 vol.~25, no.~2, 2017.
@@ -746,8 +794,10 @@ prediction under covariate shift,'' in \emph{Proc. NeurIPS}, 2019.
 \bibitem{ghali2014poisoning} C.~Ghali, G.~Tsudik, and E.~Uzun, ``Needle in a
 haystack: mitigating content poisoning in named-data networking,'' in
 \emph{Proc. NDSS SENT}, 2014.
-\bibitem{askar2024sef} M.~Askar \emph{et al.}, ``SEF: smart energy-efficient
-forwarding,'' \emph{Comput. Mater. Contin.}, 2024.
+\bibitem{askar2024sef} N.~A.~Askar, A.~Habbal, H.~Hamouda, A.~M.~Alnajim, and
+S.~Khan, ``SEF: a smart and energy-aware forwarding strategy for NDN-based
+Internet of healthcare,'' \emph{Comput. Mater. Contin.}, 2024, doi:
+10.32604/cmc.2024.058607.
 \end{thebibliography}
 
 \end{document}
