@@ -60,8 +60,8 @@ That much is independent of any threshold or error budget: it is a property of
 how many times the encoder runs, not of where the cutoff is set. What it is
 *not* independent of is the horizon and the network size, and both bound it.
 A cold cache costs one inference per router per wording — N routers pay it N
-times, but they pay it once — so over 600 seconds the same comparison is +14%
-against +1%, and gossip's saving at 16 edge routers falls from 26% to 7.5%.
+times, but they pay it once — so over 600 seconds the same comparison is +14.4%
+against +2.4%, and gossip's saving at 16 edge routers falls from 25.6% to 6.5%.
 Below about four edge routers it is a net loss, because there is nobody to
 share with. The claim that survives is narrower than "sharing scales and
 caching does not": **sharing pays a network that is large and still learning
@@ -81,7 +81,7 @@ is a reasonable engineering choice this work does not argue against.
 
 **A tuned threshold does not transfer, and this is the narrower problem
 tackled on top.** SAF selects 0.7 on its own catalog. On the two catalogs
-here that setting gives recall of 0.66 and 0.50, while the best operating
+here that setting gives recall of 0.866 and 0.804, while the best operating
 points sit at 0.55 and 0.45 — different from SAF's and different from each
 other. A threshold is a property of the catalog it was tuned on.
 
@@ -120,9 +120,9 @@ and it is horizon-scoped.** Encoder inferences for the same workload over a
 
 | Edge routers | 1 | 2 | 4 | 8 | 16 | Growth |
 |---|---:|---:|---:|---:|---:|---:|
-| SAF (no cache) | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +3% |
-| SAF+ES (per-router cache) | 833 | 901 | 1,006 | 1,155 | 1,330 | **+60%** |
-| GS-NDN (gossiped) | 875 | 893 | 877 | 914 | 959 | **+10%** |
+| SAF (no cache) | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +2.8% |
+| SAF+ES (per-router cache) | 833 | 901 | 1,006 | 1,155 | 1,330 | **+59.6%** |
+| GS-NDN (gossiped) | 875 | 894 | 881 | 918 | 962 | **+9.9%** |
 
 SAF pays for every FIB miss, so there is nothing cached to erode and it barely
 grows. SAF+ES caches locally and thins as routers multiply. Sharing what one
@@ -132,8 +132,8 @@ point and holds regardless of it.
 
 **Two scope conditions, both measured, both easy to miss from that table.**
 It is a 60-second run, and the gap is partly a warm-up cost that amortises: over
-600 seconds SAF+ES grows +14% rather than +55%, GS-NDN +1% rather than +9%, and
-gossip's saving at 16 edge routers falls from 26% to 7.5%. The ordering never
+600 seconds SAF+ES grows +14.4% rather than +55.2%, GS-NDN +2.4% rather than +9.5%, and
+gossip's saving at 16 edge routers falls from 25.6% to 6.5%. The ordering never
 reverses at scale, but the magnitude does — the headline is the short-horizon
 figure. And **below about four edge routers gossip is a net loss**: at one edge
 router there is nobody to share with and anti-entropy costs 4–5% more inferences
@@ -146,12 +146,12 @@ tested and withdrawn.** Measured out of sample:
 
 | ε | 0.02 | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.40 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| realised error | 0.009 | 0.009 | 0.009 | 0.010 | 0.014 | 0.025 | 0.035 |
-| satisfaction | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | 0.959 | 0.967 |
+| realised error | 0.0096 | 0.0094 | 0.0100 | 0.0178 | 0.0268 | 0.0363 | 0.0417 |
+| satisfaction | 0.818 | 0.844 | 0.901 | 0.940 | 0.960 | 0.967 | 0.967 |
 
 Put against a fixed threshold tuned on one domain and carried to the other,
 rc-ndn Pareto-dominates in none of fourteen comparisons; the transferred
-threshold dominates in four, and reading the refusal reason (§16) makes that
+threshold dominates in seven, and reading the refusal reason (§16) makes that
 tally 11 to 3 against, not better. What survives is narrower than efficiency —
 call it **zero-tuning**: rc-ndn held its budget in all fourteen tests, where the
 transferred threshold missed once, at the tightest budget (ε = 0.02, tuned on
@@ -164,8 +164,8 @@ should tune a threshold on it and will do slightly better. See
 **Under schema drift — a producer quietly narrowing what it answers to,
 without any route or cache event — the budget keeps most of the advantage
 that route churn otherwise erases.** Paired seed by seed against a
-non-verifying baseline: +0.0052 ± 0.0013 satisfaction on the hospital
-catalog, 20 of 20 seeds; +0.0101 ± 0.0036 on the city catalog, 19 of 20.
+non-verifying baseline: +0.0042 ± 0.0018 satisfaction on the hospital
+catalog, 16 of 20 seeds; +0.0124 ± 0.0045 on the city catalog, 19 of 20.
 Nothing in the routing plane observes a schema drift; feedback is the only
 signal that can. See [`RESULTS.md`](RESULTS.md) §8.
 
@@ -180,7 +180,7 @@ can. Spending 5% of refused decisions on evidence gathers 598 and reaches
 Two further results, both in [`RESULTS.md`](RESULTS.md):
 
 - **Encoder cost is the only cost.** One MiniLM-L6 inference takes 7.05 ms; a
-  cosine search over a 50-entry FIB takes 0.0019 ms. Every scheme for speeding
+  cosine search over a 50-entry FIB takes 0.0045 ms. Every scheme for speeding
   up the *search* optimises a rounding error.
 - **Locality-sensitive hashing cannot route.** Nearest-by-Hamming agrees with
   the true cosine argmax 33% of the time at 64 bits, 84% at 1024. Signatures are
@@ -265,8 +265,8 @@ accounted for. See [`ndnsim/README.md`](ndnsim/README.md).
 it answers to and the instance it serves, and decides on that alone — never on
 the catalog's ground truth. Declarations are deliberately incomplete: at
 `alias_coverage=0.7` a producer leaves 29% of the wordings it can be asked by
-undeclared, and GS-NDN's satisfaction falls from 0.940 to 0.826 (city: 0.956 to
-0.776) as coverage drops to 0.5. The feedback channel is informative, not
+undeclared, and GS-NDN's satisfaction falls from 0.941 to 0.819 (city: 0.960 to
+0.771) as coverage drops to 0.5. The feedback channel is informative, not
 correct. See [`RESULTS.md`](RESULTS.md) §15.
 
 *Exploration is a real cost.* The 5% of refused decisions spent on evidence are
@@ -275,9 +275,10 @@ rather than folded into the reported rate.
 
 *Poisoning degrades gracefully; it is not prevented, and risk control does not
 help.* Against a persistent attacker re-injecting every gossip round,
-GS-NDN's satisfaction falls from 0.940 to 0.745 at 50% compromise and its
-realised error rises from 0.027 to 0.168 (risk-controlled: 0.919 to 0.753, and
-0.014 to 0.169) — the budget is a guarantee conditional on honest reporting, and
+GS-NDN's satisfaction falls from 0.941 to 0.854 at 50% compromise and its
+realised error rises from 0.026 to 0.082; with verification restricted to
+locally resolved mappings, as it was before the defect in §17 was found, it
+falls to 0.747 with error 0.164 — the budget is a guarantee conditional on honest reporting, and
 that condition is exactly what the attack removes. All three strategies degrade
 alike; what limits the damage is that a router's own confirmed mappings outrank
 anything it is told. Provenance and reputation are left as future work.
@@ -288,8 +289,8 @@ twenty seeds, departure and relocation are not: FIB withdrawal invalidates the
 stale mapping before any producer gets the chance to refuse it, so at one
 second between events every strategy lands within 0.02 of the others (0.368 to
 0.385). Schema drift removes that confound — nothing is withdrawn, nothing is
-invalidated — and there verification's advantage reappears: +0.0052 to
-+0.0101 satisfaction, paired and statistically significant. Both are reported,
+invalidated — and there verification's advantage reappears: +0.0042 to
++0.0124 satisfaction, paired and statistically significant. Both are reported,
 because which one an operator sees depends entirely on whether a given churn
 event happens to touch the routing plane.
 

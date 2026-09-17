@@ -1,5 +1,22 @@
 # Results
 
+> **Regenerated 2026-09-16 from a single code version**, at 20 seeds on both
+> catalogs. Three changes since the previous campaign move numbers throughout
+> and are worth knowing before reading any of them:
+>
+> 1. **Verification now reaches mappings learned over gossip.** It did not
+>    before, so GS-NDN's central claim held only for mappings a router resolved
+>    itself. §9's figures change most. `gs-ndn-unverified-import` reproduces the
+>    old behaviour on demand.
+> 2. **A producer can now say which of the two refusals it is**, decided from
+>    the instance it is attached to. Before this the routing-error label never
+>    fired once and every misroute was reported as a vocabulary gap, which is
+>    why §16's reason-aware arms previously looked worse than useless.
+> 3. **Peer reputation** (§9) and the **gossip-period frontier** (§2) are new.
+>
+> Numbers here are read from `results/*.json`. Where this file and the code
+> disagree, the code and its JSON win.
+
 Twenty-seed means with 95% confidence intervals, from
 `experiments/run_experiments.py --all --seeds 20`. Processing costs come from
 `data/costs.json`, measured on the machine that ran the campaign by
@@ -42,13 +59,13 @@ or biased the correction in §16 is worth up to 0.08 satisfaction.
 |---|---:|---:|
 | MiniLM-L6 inference, one name | 7.05 ms | 1× |
 | Character n-gram encoder, one name | 0.096 ms | 73× cheaper |
-| Cosine search over a 50-entry FIB | 0.0019 ms | 3,700× cheaper |
+| Cosine search over a 50-entry FIB | 0.0045 ms | 1,566× cheaper |
 | Cosine search over a 1000-entry FIB | 0.027 ms | 260× cheaper |
 | Embedding Store probe | 0.0001 ms | 70,000× cheaper |
 
 **This decides the design.** The similarity search is not the bottleneck and
 cannot become one at any FIB size a router would hold. Approximate
-nearest-neighbour indexes and hash-based lookup optimise the 0.0019 ms. The only
+nearest-neighbour indexes and hash-based lookup optimise the 0.0045 ms. The only
 quantity worth attacking is how often the 7.05 ms is paid.
 
 ## 2. Where the cost goes as the network grows
@@ -58,8 +75,8 @@ Encoder inferences per run as edge routers increase:
 | Edge routers | 1 | 2 | 4 | 8 | 16 | Growth |
 |---|---:|---:|---:|---:|---:|---:|
 | SAF | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +3% |
-| SAF+ES | 833 | 901 | 1,006 | 1,155 | 1,330 | **+60%** |
-| GS-NDN | 875 | 893 | 877 | 914 | 959 | **+10%** |
+| SAF+ES | 833 | 901 | 1,006 | 1,155 | 1,330 | **+59.6%** |
+| GS-NDN | 875 | 894 | 881 | 918 | 962 | **+9.9%** |
 
 SAF caches nothing, so it pays one inference per FIB miss wherever the miss
 happens. SAF+ES caches per router: as traffic splits across more routers each
@@ -79,16 +96,16 @@ horizons, twenty seeds, both domains:
 
 | Horizon | SAF+ES growth | GS-NDN growth | Gossip saves at 16 edges |
 |---|---:|---:|---:|
-| 60 s | +55% / +61% | +9% / +15% | **26% / 27%** |
+| 60 s | +55.2% / +60.7% | +9.5% / +15.0% | **25.6% / 26.8%** |
 | 240 s | +31% / +37% | +6% / +12% | **16% / 17%** |
-| 600 s | +14% / +21% | +1% / +9% | **7.5% / 9.5%** |
+| 600 s | +14.4% / +21.0% | +2.4% / +8.9% | **6.5% / 9.2%** |
 
 *hospital / city.*
 
 **The ordering never reverses at scale, and the magnitude falls by roughly two
 thirds.** GS-NDN grows less than SAF+ES at every horizon on both domains, so the
 qualitative claim in the table above survives; what does not survive is reading
-+60% against +10% as a standing property of the two designs. It is the 60-second
++59.6% against +9.9% as a standing property of the two designs. It is the 60-second
 figure.
 
 **And below about four edge routers, gossip loses outright.** At one edge router
@@ -116,14 +133,14 @@ and costs, at 16 edge routers:
 
 | Horizon | GS-NDN saves | full-sync saves | GS-NDN gossip | full-sync gossip |
 |---|---:|---:|---:|---:|
-| 60 s | **26% / 27%** | 21% / 23% | 743 / 766 kB | 871 / 897 kB (1.2×) |
+| 60 s | **25.6% / 26.8%** | 21.0% / 22.4% | 746 / 768 kB | 873 / 900 kB (1.2×) |
 | 240 s | **16% / 17%** | 13% / 15% | 1516 / 1541 kB | 2181 / 2183 kB (1.4×) |
-| 600 s | **7.5% / 9.5%** | 6.2% / 8.3% | 2777 / 2768 kB | 4461 / 4456 kB (1.6×) |
+| 600 s | **6.5% / 9.2%** | 5.5% / 8.0% | 2792 / 2776 kB | 4480 / 4460 kB (1.6×) |
 
 *hospital / city, twenty seeds.*
 
 **Syncing harder is worse on both axes.** It removes *fewer* encoder inferences
-than the bounded protocol — 21% against 26% at 60 seconds, and growth 1 → 16
+than the bounded protocol — 21.0% against 25.6% at 60 seconds, and growth 1 → 16
 edge routers of +16% against +9% — while sending 1.2× to 1.6× the bytes. The
 reason is that neither is limited by how fast a mapping can reach everyone.
 Anti-entropy at fanout 2 already reaches N routers in O(log N) rounds, so
@@ -221,7 +238,7 @@ calls and including them would dilute any rate towards zero.
 |---|---:|---:|---:|---:|---:|---:|---:|
 | realised error | 0.009 | 0.009 | 0.009 | 0.010 | 0.014 | 0.025 | 0.035 |
 | within budget | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| satisfaction | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | 0.959 | 0.967 |
+| satisfaction | 0.818 | 0.844 | 0.901 | 0.940 | 0.960 | 0.967 | 0.967 |
 | coverage | 0.194 | 0.194 | 0.205 | 0.222 | 0.238 | 0.258 | 0.265 |
 | calibrated routes | 235 | 235 | 264 | — | 348 | — | 402 |
 | boundary spread (σ) | 0.000 | 0.000 | 0.012 | — | 0.042 | — | 0.096 |
@@ -267,7 +284,7 @@ moved to. Same configuration as the sweep above, twenty seeds
 | within budget | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | its satisfaction | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 | 0.971 |
 | rc-ndn realised error | 0.009 | 0.009 | 0.009 | 0.010 | 0.014 | 0.025 | 0.035 |
-| rc-ndn satisfaction | 0.818 | 0.818 | 0.841 | 0.885 | 0.919 | 0.959 | 0.967 |
+| rc-ndn satisfaction | 0.818 | 0.844 | 0.901 | 0.940 | 0.960 | 0.967 | 0.967 |
 
 **Tuned on hospital, evaluated on city:**
 
@@ -282,7 +299,7 @@ moved to. Same configuration as the sweep above, twenty seeds
 **rc-ndn does not dominate the transferred frontier, and the earlier claim of
 better efficiency is withdrawn.** Across the fourteen comparisons -- seven
 budgets in each direction -- rc-ndn Pareto-dominates in **none**. The
-transferred threshold dominates in four, all at ε ≥ 0.2 on the hospital-tuned
+transferred threshold dominates in seven, most at ε ≥ 0.1 on the hospital-tuned
 side where 0.45 reaches 0.983 satisfaction inside budget and rc-ndn's best is
 0.979. The other ten are trades: less error for less satisfaction, which is the
 same trade section 6 already reports.
@@ -422,8 +439,8 @@ twenty seeds, differences against GS-NDN without verification):
 
 | | ISR | producer refusals | seeds won |
 |---|---:|---:|---:|
-| GS-NDN, hospital | **+0.0052 ± 0.0013** | −0.0083 ± 0.0016 | **20 / 20** |
-| GS-NDN, city | **+0.0101 ± 0.0036** | −0.0171 ± 0.0039 | **19 / 20** |
+| GS-NDN, hospital | **+0.0042 ± 0.0018** | −0.0082 ± 0.0019 | **16 / 20** |
+| GS-NDN, city | **+0.0124 ± 0.0045** | −0.0233 ± 0.0041 | **19 / 20** |
 | SAF+ES, hospital | −0.0000 ± 0.0002 | +0.0001 ± 0.0002 | 6 / 20 |
 | Risk-controlled, hospital | −0.0252 ± 0.0085 | −0.0361 ± 0.0082 | 0 / 20 |
 
@@ -431,9 +448,9 @@ twenty seeds, differences against GS-NDN without verification):
 The advantage over not verifying is +0.0080 satisfaction on a static hospital
 network — the 0.8 points the ablation already reports. Under relocation at one
 second it is +0.0005: gone, because the route withdrawal destroyed the mapping
-first. Under schema drift at one second it is **+0.0052 ± 0.0013, on twenty
+first. Under schema drift at one second it is **+0.0042 ± 0.0018, on sixteen
 seeds out of twenty**, with 8% fewer Interests wasted on a producer that will
-refuse; city gives +0.0101 ± 0.0036 on nineteen of twenty and 14% fewer. So
+refuse; city gives +0.0124 ± 0.0045 on nineteen of twenty and 20% fewer. So
 drift keeps about two thirds of the static advantage under a churn rate that
 otherwise destroys it, and the claim this experiment can support is that
 **feedback survives an event nothing else can see** — not that churn is where
@@ -449,7 +466,7 @@ The risk controller trades in the other direction, and hard: 36% fewer refused
 Interests than SAF+ES at one second (0.066 against 0.103) for two and a half
 points of satisfaction. That is the same trade section 6 reports, and drift
 sharpens it rather than changing it. City behaves the same way — verification
-+0.0101 ± 0.0036 satisfaction on 19 of 20 seeds, refusals 0.101 against 0.118.
++0.0124 ± 0.0045 satisfaction on 19 of 20 seeds, refusals 0.095 against 0.118.
 
 ### Does an adaptive budget help?
 
@@ -559,9 +576,9 @@ against names clients actually request:
 
 | compromised | 0% | 12.5% | 25% | 50% |
 |---|---:|---:|---:|---:|
-| GS-NDN satisfaction | 0.940 | 0.832 | 0.783 | 0.745 |
+| GS-NDN satisfaction | 0.941 | 0.894 | 0.872 | 0.854 |
 | Risk-controlled satisfaction | 0.919 | 0.822 | 0.780 | 0.754 |
-| GS-NDN realised error | 0.027 | 0.103 | 0.142 | 0.168 |
+| GS-NDN realised error | 0.026 | 0.058 | 0.070 | 0.082 |
 | Risk-controlled realised error | 0.014 | 0.105 | 0.151 | 0.170 |
 
 **Degradation is graceful, not prevented.** Against a persistent attacker,
@@ -695,7 +712,7 @@ both setups define identically. See [`ndnsim/`](ndnsim/).
   decide from schemas they declare, never from the catalog oracle, and those
   declarations are deliberately incomplete: measured in section 15, at
   `alias_coverage=0.7` a producer leaves 29% of the wordings it can be asked by
-  undeclared, and satisfaction falls 0.940 → 0.826 as coverage drops to 0.5.
+  undeclared, and satisfaction falls 0.941 → 0.819 as coverage drops to 0.5.
   What is not modelled is a producer whose schema is adversarially wrong.
 - **The budget is conditional on honest reporting.** Section 9 measures what
   that condition is worth; it does not remove it.
