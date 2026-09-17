@@ -265,40 +265,32 @@ so precision, recall and false-positive rate are reported separately.
 \subsection{Comparison basis}
 \label{sec:basis}
 
-Because the baseline is what this work extends, we reproduce its evaluation
-setting rather than inventing one. The access-edge topology, the one-way
-latencies (10\,ms client-to-router, 20\,ms router-to-provider), the FIB of 50
-entries, the request rates of 30--300 Interests/s, the Zipf skew of $1.2$, a
-disabled Content Store and an unbounded PIT are all taken from
-Amadeo \emph{et al.}~\cite{amadeo2026}. Our catalogs share their construction
-exactly: 50 services, each with one canonical name and six rewordings, giving
-350 satisfiable names, plus an equal number of unrelated names---their harder
-configuration, in which half the offered catalog cannot be served by anything.
+We reproduce the baseline's evaluation setting rather than inventing one: the
+access-edge topology, the one-way latencies (10\,ms client-to-router, 20\,ms
+router-to-provider), the 50-entry FIB, the 30--300 Interests/s range, the Zipf
+skew of $1.2$, a disabled Content Store and an unbounded PIT all come from
+Amadeo \emph{et al.}~\cite{amadeo2026}, and our catalogs share their
+construction exactly---50 services, one canonical name and six rewordings each,
+350 satisfiable names, plus an equal number of unrelated ones.
 
-We report their metrics. \emph{Service discovery time} is our
-Interest-satisfaction time and decomposes identically into client-to-router,
-queueing, processing and router-to-provider components. \emph{Processing time}
-is our encoder invocation count multiplied by the measured inference cost, plus
-queueing. Their \emph{share of Interests forwarded successfully on the first
-attempt} is our satisfaction rate, with one deliberate difference stated
-plainly: they count an Interest as successful when it is forwarded and answered,
-while we additionally require the Data to have come from the service the name
-should resolve to. A confident match to the wrong room's sensor is a success
-under the first definition and a misdelivery under ours. We use the stricter one
-because a forwarding plane that resolves names semantically can fail in exactly
-that way, and a metric that cannot see the failure cannot be used to tune
-against it.
+We report their metrics. Their \emph{service discovery time} is our
+Interest-satisfaction time, decomposing identically; their \emph{processing
+time} is our encoder-invocation count times the measured inference cost, plus
+queueing. Their \emph{share of Interests forwarded on the first attempt} is our
+satisfaction rate, with one deliberate difference: they count an Interest
+successful when it is forwarded and answered, while we also require the Data to
+have come from the service the name should resolve to. A confident match to the
+wrong room's sensor is a success under the first definition and a misdelivery
+under ours, and a metric that cannot see that failure cannot be tuned against
+it.
 
 \textbf{Absolute numbers are therefore not comparable across the two papers,
-and we do not compare them.} Amadeo \emph{et al.} report essentially complete
-forwarding at $\mathrm{Th}=0.7$ on their catalog; at the same threshold ours
-yields recall of $0.866$ and $0.804$. The gap is a property of the rewordings,
-not of the method: their variations are synonym substitutions, whereas our six
-rewrite families also drop levels of hierarchy, reorder components and
-abbreviate them, and a seventh family draws terms from published IoT
-vocabularies. Ours is a harder instance of the same catalog design. Every
-comparison in this paper is therefore between strategies measured inside one
-harness, never between our numbers and a published one.
+and we do not compare them.} They report essentially complete forwarding at
+$\mathrm{Th}=0.7$; ours yields recall of $0.866$ and $0.804$ there. The gap is
+in the rewordings, not the method---theirs are synonym substitutions, ours also
+drop hierarchy levels, reorder and abbreviate, and a seventh family draws on
+published IoT vocabularies. Every comparison here is between strategies inside
+one harness, never against a published number.
 
 \subsection{Cross-validation}
 
@@ -315,6 +307,14 @@ processes run under differing \texttt{PYTHONHASHSEED} values.
 
 \section{Scaling: Sharing versus Caching}
 \label{sec:scaling}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_scaling.pdf}
+\caption{Encoder invocations against edge routers. The per-router cache grows
+with the network; gossiped sharing stays nearly flat.}
+\label{fig:scaling}
+\end{figure}
 
 Fig.~\ref{fig:scaling} is the primary result. Semantic forwarding without a
 cache pays for every FIB miss, so it has nothing to erode and grows $+2.8\%$
@@ -366,99 +366,62 @@ aggressively.
 \subsection{A Pareto frontier, not an operating point}
 \label{sec:frontier}
 
-\begin{table}[t]
-\caption{Anti-entropy period at 16 edge routers: inference saving against
-gossip bytes. Uniform peer selection versus selection biased by pending delta.}
-\label{tab:frontier}
-\centering
-\small
-\begin{tabular}{@{}lrrrr@{}}
-\toprule
-& \multicolumn{2}{c}{uniform} & \multicolumn{2}{c}{delta-biased} \\
-period & saving & kB & saving & kB \\
-\midrule
-$0.25$\,s & $24.4\%$ & 933 & $24.2\%$ & 919 \\
-$\mathbf{0.50}$\,\textbf{s} & $25.6\%$ & 746 & $\mathbf{26.1\%}$ & \textbf{718} \\
-$1.00$\,s & $24.7\%$ & 707 & $\mathbf{25.8\%}$ & \textbf{685} \\
-$2.00$\,s & $21.5\%$ & 603 & $21.7\%$ & 606 \\
-$5.00$\,s & $18.0\%$ & 433 & $18.0\%$ & 432 \\
-\bottomrule
-\end{tabular}
-\end{table}
+The gossip period is a degree of freedom, and a single value would hide a
+trade worth seeing. Sweeping it from $0.25$ to $5$\,s at 16 edge routers moves
+the saving from $24.4\%$ to $18.0\%$ while gossip traffic falls from $933$ to
+$433$\,kB; at 4 edge routers the saving is flat across the same range
+($8.5$--$9.6\%$) and a longer period is nearly free. The exchange rate between
+bytes and inferences therefore depends on network size, and a conclusion drawn
+at one operating point would have been wrong at the other. The chosen $0.5$\,s
+is also Pareto-optimal among the points measured: $0.25$\,s is worse on
+\emph{both} axes.
 
-The gossip period is a degree of freedom, and reporting a single value would
-hide a trade the reader should see. Table~\ref{tab:frontier} sweeps it. Two
-observations matter.
-
-First, the exchange rate between bytes and inferences depends on network size.
-At 4 edge routers the saving is flat across the whole range ($8.5$--$9.6\%$) and
-a longer period is nearly free; at 16 edge routers moving from $0.5$\,s to
-$5$\,s costs $7.6$ points of saving to halve the bytes. A conclusion drawn at
-one operating point would have been wrong at the other. Second, $0.25$\,s is
-worse than $0.5$\,s on \emph{both} axes, so the chosen default is
-Pareto-optimal among measured points rather than conventional.
-
-\textbf{Delta-biased peer selection.} Once the network converges, the modal
-anti-entropy exchange is two agreeing digests and no payload. Ranking candidate
-partners by how far behind they are---computable from the watermark the sender
-already keeps, requiring no messages and asking the peer nothing---redirects
-those exchanges. One pick out of \texttt{fanout} remains uniform: a purely
-greedy rule is no longer an epidemic process and can starve a peer that never
-tops the ranking, trading bounded propagation for unbounded.
-
-This is the only mechanism we tested that moves the frontier outward rather than
-sliding along it. Paired seed by seed at 16 edge routers it saves
-$11.1 \pm 7.5$ additional inferences while sending $3.68 \pm 0.96\%$ fewer bytes
-at $0.5$\,s (hospital, 14/20 and 19/20 seeds), and $24.9 \pm 7.3$ inferences at
-$1.0$\,s (20/20 seeds). Satisfaction is unchanged, which is correct for a
-mechanism that redirects exchanges rather than changing what is forwarded. The
-honest magnitude is $1$--$1.5\%$ of encoder invocations and $3\%$ of bytes: a
-refinement that costs nothing, not a headline. It helps only in the middle of
-the period range---at $0.25$\,s everyone is already current and at $5$\,s rumour
-push carries almost everything---which is itself evidence that it works for the
-stated reason.
+\textbf{Delta-biased peer selection.} Once converged, the modal anti-entropy
+exchange is two agreeing digests and no payload. Ranking partners by how far
+behind they are---read off the watermark the sender already keeps, costing no
+messages---redirects those exchanges; one pick of \texttt{fanout} stays uniform,
+since a purely greedy rule is no longer an epidemic process and can starve a
+peer that never tops the ranking. This is the only mechanism we tested that
+moves the frontier outward rather than along it: paired at 16 edge routers it
+saves $11.1 \pm 7.5$ inferences while sending $3.68 \pm 0.96\%$ fewer bytes at
+$0.5$\,s, and $24.9 \pm 7.3$ inferences at $1.0$\,s (20/20 seeds), with
+satisfaction unchanged. The honest magnitude is $1$--$1.5\%$ of invocations and
+$3\%$ of bytes---a refinement that costs nothing, not a headline---and it helps
+only mid-range, which is itself evidence it works for the stated reason.
 
 \section{Calibrating from Free Labels}
 \label{sec:risk}
 
 A threshold is a property of the catalog it was tuned on: $0.7$ is chosen on
-the baseline's catalog and yields recall of $0.866$ and $0.804$ on ours, where
-the best operating points sit nearer $0.5$ and $0.45$. Worse, one number must
-serve every route---some services sit alone in embedding space and a loose score
-is safe, others have near-identical siblings and a high score is still a coin
-flip.
+the baseline's catalog and yields recall of $0.866$ and $0.804$ on ours. Worse,
+one number must serve every route---some services sit alone in embedding space
+and a loose score is safe, others have near-identical siblings and a high score
+is a coin flip. Since every semantic forwarding decision is an experiment the
+network answers, $(\text{score},\text{verdict})$ pairs accumulate for free, and
+an operator can set an error budget $\varepsilon$ instead of a threshold: for
+route $r$, take the lowest score whose upper confidence bound on the error rate
+among observations at or above it stays within $\varepsilon$. We use a Wilson
+bound, since with a dozen observations the normal approximation assigns a route
+with no errors a bound of exactly zero, and shrink each route toward a pooled
+boundary at a rate set by its own evidence.
 
-Every semantic forwarding decision is an experiment the network answers, so
-$(\text{score}, \text{verdict})$ pairs accumulate for free. For route $r$ with
-observations $(s_i, y_i)$ we take the boundary $\tau_r$ as the smallest score
-such that, among observations at or above it, the upper confidence bound on the
-error rate stays within an operator-set budget $\varepsilon$:
-\begin{equation}
-\tau_r = \min \{\, s : \mathrm{UCB}_{\delta}(\hat{e}_{\ge s}, n_{\ge s}) \le \varepsilon \,\}
-\end{equation}
-using a Wilson bound, because with a dozen observations the normal
-approximation assigns a route with no errors a bound of exactly zero. Routes are
-estimated hierarchically, shrinking toward a pooled boundary at a rate set by
-their own evidence: a single route is seen a few dozen times at most, and a
-conservative bound on that many observations is nearly vacuous.
+Two results follow, and only one of them is good.
 
 \textbf{Risk control deadlocks without exploration.} A boundary set too high
 blocks exactly the decisions that would produce the evidence to lower it. Left
-unexplored the controller settles at refuse-everything and stays there: at
-$\varepsilon = 0.02$ it reaches $0.732$ satisfaction, and tightening
-$\varepsilon$ further changes nothing because it is already refusing what it
-can. Spending $5\%$ of refused decisions on evidence reaches $0.818$. This is
-not an estimator bug but a property of learning from one's own choices.
+unexplored the controller settles at refuse-everything and stays there, reaching
+$0.732$ satisfaction at $\varepsilon=0.02$; tightening $\varepsilon$ further
+changes nothing because it is already refusing what it can. Spending $5\%$ of
+refused decisions on evidence reaches $0.818$. This is not an estimator bug but
+a property of learning from one's own choices, and we report those exploratory
+forwards separately because they are decisions the budget did not cover.
 
 \textbf{The efficiency claim was tested and withdrawn.} The budget holds
-out-of-sample at every setting we tried---realised error stays under
-$\varepsilon$ in all fourteen tests. But against a fixed threshold tuned on one
-catalog and carried to the other, the risk controller Pareto-dominates in
-\emph{none} of fourteen comparisons, while the transferred threshold dominates
-in seven. What survives is narrower and we report it as such: the controller
-needs no labelled sample of the domain it runs on, because it calibrates from
-live producer feedback. An operator who \emph{has} a labelled target-domain
-catalog should tune a threshold on it and will do slightly better.
+out-of-sample in all fourteen tests. But against a threshold tuned on one
+catalog and carried to the other, the controller Pareto-dominates in \emph{none}
+of fourteen comparisons while the transferred threshold dominates in seven. What
+survives is narrower: the controller needs no labelled sample of the domain it
+runs on. An operator who \emph{has} one should tune a threshold instead.
 
 \section{The Feedback is Biased, Not Just Noisy}
 \label{sec:bias}
@@ -513,6 +476,15 @@ problem with its magnitude measured, rather than as a mechanism that closes it.
 
 \section{Threat Model and Peer Reputation}
 \label{sec:threat}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_robust.pdf}
+\caption{Satisfaction and realised error under a persistent poisoning attacker.
+Reputation is free at zero compromise and recovers most of the attack's cost
+thereafter.}
+\label{fig:robust}
+\end{figure}
 
 \subsection{Threat model}
 
@@ -584,7 +556,7 @@ GS-NDN & $0.007$ & $0.044$ & $0.060$ & $0.071$ \\
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:robust} reports the effect. At $50\%$ compromise reputation
+Table~\ref{tab:robust} and Fig.~\ref{fig:robust} report the effect. At $50\%$ compromise reputation
 recovers $0.162$ of the $0.193$ satisfaction the attack costs on hospital
 ($84\%$) and $0.177$ of $0.207$ on city ($86\%$), and cuts realised error by
 $40\%$ and $52\%$. It is free when nobody is attacking---$0.941$ against
@@ -623,25 +595,22 @@ is what makes that visible---the attack column alone would have argued for $1$.
 \section{Supporting Results}
 \label{sec:supporting}
 
-\textbf{Latency under load.} Encoding on every FIB miss
-saturates the forwarding path: p95 round-trip time rises from $79$ to $172$\,ms
-between 30 and 300 Interests/s, while cached and gossiped variants stay flat at
-$78$--$83$\,ms. The knee sits just past 200 Interests/s, which independently
-reproduces the bottleneck Amadeo \emph{et al.} report beyond roughly 210
-Interests/s for the same encoder---a point of agreement we did not tune for and
-that we take as evidence the cost model is calibrated correctly.
+\textbf{Latency and energy.} Encoding on every FIB miss saturates the
+forwarding path: p95 round-trip time rises from $79$ to $172$\,ms between 30 and
+300 Interests/s, while cached and gossiped variants stay flat at $78$--$83$\,ms.
+The knee sits just past 200 Interests/s, independently reproducing the
+bottleneck the baseline reports beyond roughly 210 for the same encoder---%
+agreement we did not tune for, and evidence the cost model is calibrated. On the
+radio model of Askar \emph{et al.}~\cite{askar2024sef}, with encoder energy
+charged at measured CPU draw, GS-NDN uses $634$\,J against $735$\,J uncached and
+$654$\,J for a per-router cache, at higher satisfaction. A character $n$-gram
+control reaches $0.791$ satisfaction where MiniLM reaches $0.969$: it resolves
+abbreviations and fails on true synonymy, which is what the encoder pays for.
 
-\textbf{Energy and encoder choice.} On the radio model of Askar \emph{et
-al.}~\cite{askar2024sef}, with encoder energy charged at measured CPU draw,
-GS-NDN uses $634$\,J against $735$\,J uncached and $654$\,J for a per-router
-cache, at higher satisfaction. A character $n$-gram control reaches $0.791$
-satisfaction where MiniLM reaches $0.969$: it resolves abbreviations and fails
-on true synonymy, which is the gap the encoder pays for.
-
-\textbf{Schema drift.} Producer relocation hurts every strategy equally---FIB
-withdrawal invalidates a stale mapping before any producer can refuse it. Schema
-drift, where a producer quietly narrows what it answers to without any routing
-event, removes that confound, and there verification's advantage appears:
+\textbf{Schema drift.} Producer relocation hurts every strategy equally, since
+FIB withdrawal invalidates a stale mapping before any producer can refuse it.
+Schema drift---a producer quietly narrowing what it answers to, with no routing
+event---removes that confound, and there verification's advantage appears:
 $+0.0042 \pm 0.0018$ satisfaction on hospital (16/20 seeds) and
 $+0.0124 \pm 0.0045$ on city (19/20), paired seed by seed. Nothing in the
 routing plane observes a schema drift; feedback is the only signal that can.
@@ -684,23 +653,6 @@ correcting that bias helps inverts on a quantity operators cannot observe. We
 report that as an open problem with its magnitude measured, together with two
 mechanisms that did not survive their own evaluation, because a design space is
 described as much by what fails in it as by what works.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{fig_scaling.pdf}
-\caption{Encoder invocations against edge routers. The per-router cache grows
-with the network; gossiped sharing stays nearly flat.}
-\label{fig:scaling}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{fig_robust.pdf}
-\caption{Satisfaction and realised error under a persistent poisoning attacker.
-Reputation is free at zero compromise and recovers most of the attack's cost
-thereafter.}
-\label{fig:robust}
-\end{figure}
 
 %% Balance the two columns of the final page so the bibliography ends level.
 \balance
