@@ -1,5 +1,7 @@
-__pycache__/
-*.py[cod]
-.ipynb_checkpoints/
-data/models/
-results/raw/
+__pycache__/ 
+*.pyc 
+.pytest_cache/ 
+*.aux 
+*.log 
+*.out 
+*.synctex.gz 
