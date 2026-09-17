@@ -210,6 +210,12 @@ score means nothing outside the embedding space that produced it.
 ## Layout
 
 ```
+paper/         the manuscript; self-contained, upload this folder to Overleaf
+  paper.tex
+  figures/     copied from results/figures by make_figures.py --sync-paper
+docs/          project decks, the implementation plan, the Persian status report
+references/    annotated related work, with a verification status per entry
+  papers/      PDFs of the three papers this work is measured against
 gsndn/
   datasets/      two labelled name catalogs, built from an explicit lexicon,
                  plus grounded variants using Brick/SAREF/Haystack/SSN class names

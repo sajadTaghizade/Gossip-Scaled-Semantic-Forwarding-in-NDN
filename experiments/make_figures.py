@@ -500,6 +500,11 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     parser.add_argument("--results", type=Path, default=root / "results")
     parser.add_argument("--out", type=Path, default=root / "results" / "figures")
+    parser.add_argument(
+        "--sync-paper", action="store_true",
+        help="also copy the PDFs into paper/figures/, so the paper directory "
+             "is self-contained and uploading it alone to Overleaf compiles",
+    )
     args = parser.parse_args()
 
     style()
@@ -518,6 +523,17 @@ def main() -> int:
     detail = root / "data" / "costs.detail.json"
     if detail.exists():
         fig_simhash(json.loads(detail.read_text()), args.out)
+
+    if args.sync_paper:
+        import shutil
+
+        destination = root / "paper" / "figures"
+        destination.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        for pdf in sorted(args.out.glob("*.pdf")):
+            shutil.copy2(pdf, destination / pdf.name)
+            copied += 1
+        print(f"[+] synced {copied} figures -> {destination}")
 
     print("[+] done")
     return 0

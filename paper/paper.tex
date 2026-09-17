@@ -15,14 +15,34 @@
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
 
-\graphicspath{{../results/figures/}}
+%% Figures live in paper/figures/, copied from results/figures/ by
+%% experiments/make_figures.py --sync-paper. The paper directory is therefore
+%% self-contained: uploading it alone to Overleaf compiles.
+\graphicspath{{figures/}}
 
 \begin{document}
 
 \title{Gossip-Scaled Semantic Forwarding in\\Named Data Networking}
 
-\author{\IEEEauthorblockN{Mohammad Mahdi Yari, Sajjad Taghizadeh}
-\IEEEauthorblockA{Advisor: Dr.~Mohammadreza Shakournia}}
+%% ---------------------------------------------------------------------------
+%% ANONYMISED for review and for supervisor circulation.
+%%
+%% Restore for camera-ready only, and settle two things first:
+%%   (a) the spelling of the first author's surname -- "YariBaran",
+%%       "Yari-Baran" and "Yari Baran" have all been used; pick one and use it
+%%       consistently, because it is the name that gets indexed;
+%%   (b) who the authors are. The idea, implementation and first draft are
+%%       Yari-Baran and Taghizadeh's. Anyone added beyond that is a decision
+%%       for the people involved and their institution's authorship norms, not
+%%       something to inherit from a template.
+%%
+%% \author{\IEEEauthorblockN{MohammadMahdi YariBaran, Sajjad Taghizadeh}
+%% \IEEEauthorblockA{Department of Computer Engineering\\
+%% [University], [City], Iran\\
+%% Email: \{...\}@...}}
+%% ---------------------------------------------------------------------------
+\author{\IEEEauthorblockN{Anonymous Authors}
+\IEEEauthorblockA{Submission under review}}
 
 \maketitle
 
@@ -59,8 +79,9 @@ prediction, Byzantine resilience.
 
 \section{Introduction}
 
-Named Data Networking (NDN) forwards on names, and a name that does not match
-the Forwarding Information Base (FIB) is dropped. Real deployments break on
+Named Data Networking (NDN)~\cite{jacobson2009ccn,zhang2014ndn} forwards on
+names, and a name that does not match the Forwarding Information Base (FIB) is
+dropped. Real deployments break on
 this: two organisations naming the same sensor differently cannot reach each
 other's data even when both are reachable. Amadeo \emph{et al.}~\cite{amadeo2026}
 answer it by embedding names and forwarding on cosine similarity, caching each
@@ -107,7 +128,22 @@ prompt caching. We evaluated an error budget as a replacement for the
 similarity threshold, it lost to a threshold tuned on one catalog and carried to
 another, and we report that as a withdrawn claim (\S\ref{sec:risk}).
 
+\textbf{Organisation.} Section~\ref{sec:related} places this work against
+semantic forwarding in ICN, the synchronisation layers NDN already provides, and
+the literature on learned decision boundaries and Byzantine-robust gossip.
+Section~\ref{sec:method} describes the simulator, the producer model and the
+measured cost basis. Section~\ref{sec:scaling} presents the scaling result, the
+two conditions bounding it, and the gossip-period frontier.
+Section~\ref{sec:risk} covers calibration from free labels and the claim we
+withdrew. Section~\ref{sec:bias} establishes that those labels are biased and
+locates the protocol gap responsible. Section~\ref{sec:threat} gives the threat
+model and the reputation mechanism built on verification.
+Section~\ref{sec:supporting} reports latency, energy, encoder choice and schema
+drift; Section~\ref{sec:limits} states the limitations, and
+Section~\ref{sec:conclusion} concludes.
+
 \section{Background and Related Work}
+\label{sec:related}
 
 \textbf{Semantic forwarding in ICN.} Chan \emph{et al.}'s Fuzzy Interest
 Forwarding~\cite{chan2017fuzzy} matches name components with Word2Vec at both
@@ -122,10 +158,15 @@ resolution rather than replicating or sharing it.
 Forwarding~\cite{posch2017saf}. We write ``semantic forwarding'' or name the
 authors; our result files retain the key \texttt{saf} for continuity.
 
-\textbf{Synchronisation NDN already has.} ChronoSync~\cite{zhu2013chronosync}
-and its successors reconcile datasets by exchanging condensed digests, and
-NLSR~\cite{hoque2013nlsr} already floods name-prefix reachability over such a
-layer. Our contribution is not the mechanism but the payload and the
+\textbf{Synchronisation NDN already has.} The anti-entropy and rumour-spreading pair we use is the classical
+epidemic construction of Demers \emph{et al.}~\cite{demers1987epidemic}, whose
+$O(\log N)$ propagation under random peer choice~\cite{karp2000rumor} is what
+\S
+ef{sec:frontier} preserves by keeping one uniform pick.
+ChronoSync~\cite{zhu2013chronosync} and its successors reconcile datasets by
+exchanging condensed digests, and NLSR~\cite{hoque2013nlsr} already floods
+name-prefix reachability over such a layer; Moll \emph{et al.}~\cite{moll2022sok}
+survey how these designs differ. Our contribution is not the mechanism but the payload and the
 precondition: a wording-to-route mapping, shared only after a Data packet
 proved it. \S\ref{sec:scaling} measures an approximation of an unbounded sync
 layer precisely because ``why not just announce the prefix'' is the first
@@ -134,9 +175,13 @@ objection this design invites.
 \textbf{Learned boundaries under an error bound.}
 vCache~\cite{schroeder2025vcache} learns per-item thresholds under a user-set
 error bound for prompt caching; Finamore \emph{et al.}~\cite{finamore2022approximatekey}
-do error-controlled similarity caching in a networking setting. Pooling
-calibration across parties is federated conformal
-prediction~\cite{lu2023federated}. What is specific to NDN is that the labels
+do error-controlled similarity caching in a networking setting. The boundaries themselves are conformal in the sense of Vovk \emph{et
+al.}~\cite{vovk2005alrw}; pooling calibration across parties is federated
+conformal prediction~\cite{lu2023federated}, and the drifting variant we
+evaluate follows adaptive conformal inference~\cite{gibbs2021aci}. That a
+threshold tuned on one catalog need not hold on another is the covariate-shift
+problem Tibshirani \emph{et al.}~\cite{tibshirani2019covariate} treat
+formally. What is specific to NDN is that the labels
 are free: an LLM cache needs a judge model to decide whether a hit was correct,
 which is the expense one was trying to avoid, whereas a forwarding plane
 receives Data or a Nack either way.
@@ -159,7 +204,9 @@ be checked.
 
 \subsection{Simulator}
 
-We use a discrete-event model in which each router has a single-server FIFO
+Names are embedded with a MiniLM sentence encoder~\cite{wang2020minilm}, a
+distilled model in the Sentence-BERT family~\cite{reimers2019sbert} and the one
+the baseline settles on. We use a discrete-event model in which each router has a single-server FIFO
 queue for packet processing, so a strategy that adds work to the forwarding path
 pays for it in queueing delay rather than in a constant read from a
 configuration file. A forwarding strategy is consulted at exactly one point---%
@@ -457,7 +504,7 @@ at random. A compromised router is a full participant holding real keys and peer
 relationships, so nothing here is defeated by authenticating the channel. It
 behaves correctly on the forwarding path and lies only into gossip---a router
 that drops traffic is a denial-of-service problem the ICN literature already
-treats, and it would confound the measurement of what the learning channel is
+treats~\cite{ghali2014poisoning}, and it would confound the measurement of what the learning channel is
 worth.
 
 \textbf{What it can do.} Inject fabricated mappings and fabricated calibration
@@ -559,6 +606,7 @@ $0.037$ error against $k=4$'s $0.044$. We use $k=2$. The honest-network control
 is what makes that visible---the attack column alone would have argued for $1$.
 
 \section{Supporting Results}
+\label{sec:supporting}
 
 \textbf{Latency under load} (Fig.~\ref{fig:rate}). Encoding on every FIB miss
 saturates the forwarding path: p95 round-trip time rises from $79$ to $172$\,ms
@@ -584,6 +632,7 @@ $+0.0124 \pm 0.0045$ on city (19/20), paired seed by seed. Nothing in the
 routing plane observes a schema drift; feedback is the only signal that can.
 
 \section{Limitations}
+\label{sec:limits}
 
 \textbf{Our synonyms are easier than standardised ones.} The catalogs are
 generated from a lexicon we wrote. To test whether that lexicon flatters the
@@ -608,6 +657,7 @@ $0.951$/$0.027$ at a quarter heterogeneous). For an error-budget system that
 trade is defensible, but it is not a clean improvement.
 
 \section{Conclusion}
+\label{sec:conclusion}
 
 Sharing a verified resolution by gossip, rather than caching it per router,
 keeps recognition cost from growing with the network---by an amount we bound
@@ -672,6 +722,30 @@ learning from missing-not-at-random implicit feedback,'' in \emph{Proc. WSDM},
 2020.
 \bibitem{edgeclipped2024} Anonymous, ``Byzantine-robust gossip: insights from a
 dual approach,'' arXiv:2405.03449, 2024.
+\bibitem{jacobson2009ccn} V.~Jacobson \emph{et al.}, ``Networking named
+content,'' in \emph{Proc. ACM CoNEXT}, 2009.
+\bibitem{zhang2014ndn} L.~Zhang \emph{et al.}, ``Named data networking,''
+\emph{ACM SIGCOMM Comput. Commun. Rev.}, vol.~44, no.~3, 2014.
+\bibitem{reimers2019sbert} N.~Reimers and I.~Gurevych, ``Sentence-BERT:
+sentence embeddings using Siamese BERT-networks,'' in \emph{Proc. EMNLP}, 2019.
+\bibitem{wang2020minilm} W.~Wang \emph{et al.}, ``MiniLM: deep self-attention
+distillation for task-agnostic compression of pre-trained transformers,'' in
+\emph{Proc. NeurIPS}, 2020.
+\bibitem{demers1987epidemic} A.~Demers \emph{et al.}, ``Epidemic algorithms for
+replicated database maintenance,'' in \emph{Proc. ACM PODC}, 1987.
+\bibitem{karp2000rumor} R.~Karp \emph{et al.}, ``Randomized rumor spreading,''
+in \emph{Proc. IEEE FOCS}, 2000.
+\bibitem{moll2022sok} P.~Moll \emph{et al.}, ``SoK: the evolution of distributed
+dataset synchronization solutions in NDN,'' in \emph{Proc. ACM ICN}, 2022.
+\bibitem{vovk2005alrw} V.~Vovk, A.~Gammerman, and G.~Shafer, \emph{Algorithmic
+Learning in a Random World}.\ Springer, 2005.
+\bibitem{gibbs2021aci} I.~Gibbs and E.~Cand\`es, ``Adaptive conformal inference
+under distribution shift,'' in \emph{Proc. NeurIPS}, 2021.
+\bibitem{tibshirani2019covariate} R.~J.~Tibshirani \emph{et al.}, ``Conformal
+prediction under covariate shift,'' in \emph{Proc. NeurIPS}, 2019.
+\bibitem{ghali2014poisoning} C.~Ghali, G.~Tsudik, and E.~Uzun, ``Needle in a
+haystack: mitigating content poisoning in named-data networking,'' in
+\emph{Proc. NDSS SENT}, 2014.
 \bibitem{askar2024sef} M.~Askar \emph{et al.}, ``SEF: smart energy-efficient
 forwarding,'' \emph{Comput. Mater. Contin.}, 2024.
 \end{thebibliography}
