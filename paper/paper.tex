@@ -20,11 +20,13 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{balance}
 
-%% An NDN name that is allowed to break after a slash. Without this a long
-%% name is one unbreakable box wider than a column, and TeX stretches every
-%% space on the line to compensate -- which is what wrecked the abstract.
-\newcommand{\ndn}[1]{\texttt{\expandafter\ndnsplit#1/\relax}}
-\def\ndnsplit#1/{\ifx\relax#1\else#1\slash\allowbreak\expandafter\ndnsplit\fi}
+%% NDN names are typeset with \path, from url (loaded by hyperref). It breaks
+%% after every slash, so a long name cannot become one unbreakable box wider
+%% than a column -- which is what stretched the spaces around it. A hand-rolled
+%% macro was tried here first and got the terminator wrong, emitting a trailing
+%% slash and no breakpoints at all.
+\urlstyle{tt}
+\newcommand{\ndn}[1]{\path{#1}}
 
 %% Figures live in paper/figures/, copied from results/figures/ by
 %% experiments/make_figures.py --sync-paper. The paper directory is therefore
@@ -95,8 +97,8 @@ names, and a name that does not match the Forwarding Information Base (FIB) is
 dropped. Real deployments break on
 this. A client asking for \ndn{/hospital/temp-sensor/room-101} gets nothing
 from a network that advertises
-\ndn{/smart-hospital/building-a/floor-1/temperature/room-101}, though the data
-it wants is one hop away. Amadeo \emph{et al.}~\cite{amadeo2026}
+\ndn{/smart-hospital/floor-1/temperature/room-101}, though the data it wants
+is one hop away. Amadeo \emph{et al.}~\cite{amadeo2026}
 answer it by embedding names and forwarding on cosine similarity, caching each
 resolution in an \emph{Embedding Store} at the router that made it.
 
@@ -204,11 +206,11 @@ a producer's declared vocabulary, which is also what determines whether the
 request could have been served. Our contribution is locating it in a forwarding
 plane and identifying the protocol gap that causes it.
 
-\textbf{Byzantine-robust gossip.} Robust-aggregation methods bound an
-adversary's influence---clipping, trimming, bounded contribution~\cite{edgeclipped2024}---%
-because in gossip learning a neighbour ships a gradient no honest node can
-check. \S\ref{sec:threat} exploits the fact that a gossiped \emph{mapping} can
-be checked.
+\textbf{Byzantine-robust gossip.} Robust-aggregation methods---clipping,
+trimming, bounded per-peer contribution---bound an adversary's influence rather
+than identifying it, because in gossip learning a neighbour ships a gradient no
+honest node can check. \S\ref{sec:threat} exploits the fact that a gossiped
+\emph{mapping} can be checked.
 
 \section{System Model and Method}
 \label{sec:method}
@@ -685,8 +687,6 @@ predictors for distributed uncertainty quantification,'' in \emph{Proc. ICML},
 \bibitem{saito2020unbiased} Y.~Saito \emph{et al.}, ``Unbiased recommender
 learning from missing-not-at-random implicit feedback,'' in \emph{Proc. WSDM},
 2020.
-\bibitem{edgeclipped2024} Anonymous, ``Byzantine-robust gossip: insights from a
-dual approach,'' arXiv:2405.03449, 2024.
 \bibitem{jacobson2009ccn} V.~Jacobson \emph{et al.}, ``Networking named
 content,'' in \emph{Proc. ACM CoNEXT}, 2009.
 \bibitem{zhang2014ndn} L.~Zhang \emph{et al.}, ``Named data networking,''
