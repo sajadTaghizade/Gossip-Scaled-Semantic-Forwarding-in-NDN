@@ -94,13 +94,12 @@ prediction, Byzantine resilience.
 
 Named Data Networking (NDN)~\cite{jacobson2009ccn,zhang2014ndn} forwards on
 names, and a name that does not match the Forwarding Information Base (FIB) is
-dropped. Real deployments break on
-this. A client asking for \ndn{/hospital/temp-sensor/room-101} gets nothing
+dropped. A client asking for \ndn{/hospital/temp-sensor/room-101} gets nothing
 from a network that advertises
-\ndn{/smart-hospital/floor-1/temperature/room-101}, though the data it wants
-is one hop away. Amadeo \emph{et al.}~\cite{amadeo2026}
-answer it by embedding names and forwarding on cosine similarity, caching each
-resolution in an \emph{Embedding Store} at the router that made it.
+\ndn{/smart-hospital/floor-1/temperature/room-101}, though the data it wants is
+one hop away. Amadeo \emph{et al.}~\cite{amadeo2026} answer this by embedding
+names and forwarding on cosine similarity, caching each resolution in an
+\emph{Embedding Store} at the router that made it.
 
 That design leaves a scaling problem its own conclusion names as future work.
 A per-router cache is populated by the traffic that router sees. Add edge
@@ -172,45 +171,47 @@ rather than sharing it.
 Forwarding~\cite{posch2017saf}. We write ``semantic forwarding'' or name the
 authors; our result files retain the key \texttt{saf} for continuity.
 
-\textbf{Synchronisation NDN already has.} The anti-entropy and rumour-spreading pair we use is the classical
-epidemic construction of Demers \emph{et al.}~\cite{demers1987epidemic}, whose
-$O(\log N)$ propagation under random peer choice~\cite{karp2000rumor} is what
-\S\ref{sec:frontier} preserves by keeping one uniform pick.
-ChronoSync~\cite{zhu2013chronosync} and its successors reconcile datasets by
-exchanging condensed digests, and NLSR~\cite{hoque2013nlsr} already floods
-name-prefix reachability over such a layer; Moll \emph{et al.}~\cite{moll2022sok}
-survey how these designs differ. Our contribution is not the mechanism but the payload and the
-precondition: a wording-to-route mapping, shared only after a Data packet
-proved it. \S\ref{sec:scaling} measures an approximation of an unbounded sync
-layer precisely because ``why not just announce the prefix'' is the first
-objection this design invites.
+\textbf{Synchronisation NDN already has.} The anti-entropy and rumour-spreading
+pair we use is the classical epidemic construction of Demers \emph{et
+al.}~\cite{demers1987epidemic}, whose $O(\log N)$ propagation under random peer
+choice~\cite{karp2000rumor} is what Section~\ref{sec:frontier} preserves by
+keeping one uniform pick. ChronoSync~\cite{zhu2013chronosync} and its successors
+reconcile datasets by exchanging condensed digests, and
+NLSR~\cite{hoque2013nlsr} already floods name-prefix reachability over such a
+layer; Moll \emph{et al.}~\cite{moll2022sok} survey how these designs differ.
+Our contribution is not the mechanism but the payload and the precondition: a
+wording-to-route mapping, shared only after a Data packet proved it.
+Section~\ref{sec:scaling} measures an approximation of an unbounded sync layer
+precisely because ``why not just announce the prefix'' is the first objection
+this design invites.
 
 \textbf{Learned boundaries under an error bound.}
 vCache~\cite{schroeder2025vcache} learns per-item thresholds under a user-set
-error bound for prompt caching; Finamore \emph{et al.}~\cite{finamore2022approximatekey}
-do error-controlled similarity caching in a networking setting. The boundaries themselves are conformal in the sense of Vovk \emph{et
-al.}~\cite{vovk2005alrw}; pooling calibration across parties is federated
-conformal prediction~\cite{lu2023federated}, and the drifting variant we
-evaluate follows adaptive conformal inference~\cite{gibbs2021aci}. That a
+error bound for prompt caching; Finamore \emph{et
+al.}~\cite{finamore2022approximatekey} do error-controlled similarity caching in
+a networking setting. The boundaries themselves are conformal in the sense of
+Vovk \emph{et al.}~\cite{vovk2005alrw}; pooling calibration across parties is
+federated conformal prediction~\cite{lu2023federated}, and the drifting variant
+we evaluate follows adaptive conformal inference~\cite{gibbs2021aci}. That a
 threshold tuned on one catalog need not hold on another is the covariate-shift
-problem Tibshirani \emph{et al.}~\cite{tibshirani2019covariate} treat
-formally. What is specific to NDN is that the labels
-are free: an LLM cache needs a judge model to decide whether a hit was correct,
-which is the expense one was trying to avoid, whereas a forwarding plane
-receives Data or a Nack either way.
+problem Tibshirani \emph{et al.}~\cite{tibshirani2019covariate} treat formally.
+What is specific to NDN is that the labels are free: an LLM cache needs a judge
+model to decide whether a hit was correct, which is the expense one was trying
+to avoid, whereas a forwarding plane receives Data or a Nack either way.
 
-\textbf{Biased feedback.} \S\ref{sec:bias} is an instance of
-missing-not-at-random feedback, the pattern Saito \emph{et al.}~\cite{saito2020unbiased}
-treat in implicit-feedback recommendation: the label a route receives depends on
-a producer's declared vocabulary, which is also what determines whether the
-request could have been served. Our contribution is locating it in a forwarding
-plane and identifying the protocol gap that causes it.
+\textbf{Biased feedback.} Section~\ref{sec:bias} is an instance of
+missing-not-at-random feedback, the pattern Saito \emph{et
+al.}~\cite{saito2020unbiased} treat in implicit-feedback recommendation: the
+label a route receives depends on a producer's declared vocabulary, which is
+also what determines whether the request could have been served. Our
+contribution is locating it in a forwarding plane and identifying the protocol
+gap that causes it.
 
-\textbf{Byzantine-robust gossip.} Robust-aggregation methods---clipping,
-trimming, bounded per-peer contribution---bound an adversary's influence rather
+\textbf{Byzantine-robust gossip.} Robust-aggregation methods (clipping,
+trimming, bounded per-peer contribution) bound an adversary's influence rather
 than identifying it, because in gossip learning a neighbour ships a gradient no
-honest node can check. \S\ref{sec:threat} exploits the fact that a gossiped
-\emph{mapping} can be checked.
+honest node can check. Section~\ref{sec:threat} exploits the fact that a
+gossiped \emph{mapping} can be checked.
 
 \section{System Model and Method}
 \label{sec:method}
@@ -320,11 +321,11 @@ with the network; gossiped sharing stays nearly flat.}
 
 Fig.~\ref{fig:scaling} is the primary result. Semantic forwarding without a
 cache pays for every FIB miss, so it has nothing to erode and grows $+2.8\%$
-from 1 to 16 edge routers. The per-router cache thins as routers multiply and
-grows $+59.6\%$ on hospital and $+67.4\%$ on city. Sharing holds that to
-$+9.9\%$ and $+17.3\%$, removing $27.7\%$ and $28.3\%$ of all inferences at 16
-edge routers. The claim is independent of any threshold or error budget---it is
-a property of how many times the encoder runs.
+and $+3.1\%$ from 1 to 16 edge routers. The per-router cache thins as routers
+multiply and grows $+59.6\%$ on hospital and $+67.4\%$ on city. Sharing holds
+that to $+9.9\%$ and $+17.3\%$, removing $27.7\%$ and $28.3\%$ of all
+inferences at 16 edge routers. The claim is independent of any threshold or
+error budget: it is a property of how many times the encoder runs.
 
 \subsection{Two conditions that bound it}
 
@@ -347,10 +348,10 @@ tested it by introducing wordings over the run instead of making them all
 askable at $t=0$, drawn from an independent random stream so only \emph{which}
 wording a request uses changes. The hypothesis is false, and instructively so: a
 slower arrival rate lowers the saving at \emph{every} horizon rather than
-sustaining it, from $18.0\%$ (closed) to $2.5\%$ (one new wording every 5\,s) at
-60\,s, monotone across the grid. Gossip's saving comes from the \emph{backlog}
-of resolutions some routers hold and others do not, and a closed catalog at
-$t=0$ is the largest backlog obtainable.
+sustaining it, from $25.6\%$ (closed) to $3.0\%$ (one new wording every 5\,s) at
+60\,s, monotone across the grid and on both catalogs. Gossip's saving comes
+from the \emph{backlog} of resolutions some routers hold and others do not, and
+a closed catalog at $t=0$ is the largest backlog obtainable.
 
 \subsection{Would a more aggressive sync layer do better?}
 
@@ -380,16 +381,16 @@ is also Pareto-optimal among the points measured: $0.25$\,s is worse on
 
 \textbf{Delta-biased peer selection.} Once converged, the modal anti-entropy
 exchange is two agreeing digests and no payload. Ranking partners by how far
-behind they are---read off the watermark the sender already keeps, costing no
-messages---redirects those exchanges; one pick of \texttt{fanout} stays uniform,
+behind they are, read off the watermark the sender already keeps and costing no
+messages, redirects those exchanges; one pick of \texttt{fanout} stays uniform,
 since a purely greedy rule is no longer an epidemic process and can starve a
 peer that never tops the ranking. This is the only mechanism we tested that
 moves the frontier outward rather than along it: paired at 16 edge routers it
 saves $11.1 \pm 7.5$ inferences while sending $3.68 \pm 0.96\%$ fewer bytes at
 $0.5$\,s, and $24.9 \pm 7.3$ inferences at $1.0$\,s (20/20 seeds), with
 satisfaction unchanged. The honest magnitude is $1$--$1.5\%$ of invocations and
-$3\%$ of bytes---a refinement that costs nothing, not a headline---and it helps
-only mid-range, which is itself evidence it works for the stated reason.
+$3\%$ of bytes, a refinement that costs nothing rather than a headline, and it
+helps only mid-range, which is itself evidence it works for the stated reason.
 
 \section{Calibrating from Free Labels}
 \label{sec:risk}
@@ -558,9 +559,10 @@ GS-NDN & $0.007$ & $0.044$ & $0.060$ & $0.071$ \\
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:robust} and Fig.~\ref{fig:robust} report the effect. At $50\%$ compromise reputation
-recovers $0.162$ of the $0.193$ satisfaction the attack costs on hospital
-($84\%$) and $0.177$ of $0.207$ on city ($86\%$), and cuts realised error by
+Table~\ref{tab:robust} and Fig.~\ref{fig:robust} report the effect. At $50\%$
+compromise reputation recovers $0.162$ of the $0.193$ satisfaction the attack
+costs on hospital ($84\%$) and $0.177$ of $0.207$ on city ($86\%$), and cuts
+realised error by
 $40\%$ and $52\%$. It is free when nobody is attacking---$0.941$ against
 $0.941$---which is the number that decides whether it can be left switched on.
 It works for the stated reason: the count of distrusted peers rises linearly
