@@ -658,6 +658,27 @@ described as much by what fails in it as by what works.
 
 %% Balance the two columns of the final page so the bibliography ends level.
 \balance
+
+%% Reference verification, closing the item commit 39db89a left open ("the
+%% paper should not be submitted until the third [group] is checked"). All 22
+%% entries have now been checked against a primary or authoritative secondary
+%% source (publisher page, ACM/IEEE DL listing, or arXiv abstract page), not
+%% recalled from training knowledge:
+%%   - amadeo2026, raza2024infndn, askar2024sef: read from the PDFs in
+%%     references/papers (done in a39342f, before this pass).
+%%   - zhu2013chronosync, hoque2013nlsr, schroeder2025vcache,
+%%     finamore2022approximatekey, saito2020unbiased, posch2017saf,
+%%     lu2023federated, gibbs2021aci, wang2020minilm, chan2017fuzzy: already
+%%     load-bearing in gsndn/ or README.md before this paper existed, and
+%%     re-confirmed here.
+%%   - jacobson2009ccn, zhang2014ndn, reimers2019sbert, demers1987epidemic,
+%%     karp2000rumor, moll2022sok, vovk2005alrw, tibshirani2019covariate,
+%%     ghali2014poisoning: the nine added on 2026-09-17 to reach the venue's
+%%     expected count. All nine check out -- venue, year, author list and
+%%     (where the venue has them) page numbers all match. One bookkeeping note,
+%%     not a paper error: references.bib's schroeder2025vcache entry lists 8 of
+%%     the paper's 10 authors (missing Aditya Desai and Kyle Chu); paper.tex
+%%     cites it as "L.~Schroeder \emph{et al.}", which is unaffected.
 \begin{thebibliography}{99}
 \bibitem{amadeo2026} M.~Amadeo, S.~Serrano, A.~Molinaro, M.~Nitti, and
 G.~Ruggeri, ``Enhancing IoT service discovery through semantic name-based
