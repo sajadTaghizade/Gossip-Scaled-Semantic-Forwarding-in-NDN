@@ -11,6 +11,13 @@ line drawn without its confidence band invites a reader to take noise for a
 result.  Colours come from a palette validated for colour-vision deficiency
 (worst adjacent CVD dE 9.1, normal-vision 22.9), and each series is also given a
 distinct marker and dash pattern, so identity never rests on hue alone.
+
+The two figures the paper includes -- scaling and robust -- are drawn at the
+width they are printed at (``COLUMN_W``), never larger.  A figure drawn at 8
+inches and placed in a 3.4-inch column has every label shrunk by 0.4, which is
+how 9 pt type reaches the page at under 4 pt.  Drawing at final size costs a
+cramped panel and buys labels a reader can read.  Their type is Times, matching
+the body text of the manuscript rather than sitting beside it in a sans face.
 """
 
 from __future__ import annotations
@@ -83,13 +90,35 @@ TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 GRID = "#dedcd5"
 
+# IEEEtran, US letter, two columns: \columnwidth is 3.39 in, \textwidth 7.16 in.
+COLUMN_W = 3.39
+TEXT_W = 7.16
+
+# A figure title repeats the LaTeX caption underneath it, so the manuscript is
+# built without them.  --titles puts them back for reading the PNGs alone.
+SHOW_TITLES = False
+
+
+def suptitle(fig, *args, **kwargs) -> None:
+    if SHOW_TITLES:
+        suptitle(fig, *args, **kwargs)
+
 
 def style() -> None:
     plt.rcParams.update({
         "figure.dpi": 140,
         "savefig.dpi": 300,
         "font.size": 9,
-        "font.family": "DejaVu Sans",
+        "font.family": "serif",
+        # Liberation Serif is metric-compatible with Times, so the figures are
+        # set in the manuscript's own face.  It is chosen over TeX Gyre Termes
+        # only because it ships as TrueType: fonttype 42 embeds a .ttf cleanly,
+        # where an OpenType/CFF face lands as CID Type 0C and every PDF reader
+        # warns about the mismatch.  Type 3 is not an option -- IEEE rejects it.
+        "font.serif": ["Liberation Serif", "Times New Roman", "Nimbus Roman",
+                       "DejaVu Serif"],
+        "mathtext.fontset": "stix",
+        "pdf.fonttype": 42,
         "axes.edgecolor": GRID,
         "axes.labelcolor": TEXT_PRIMARY,
         "axes.titlesize": 10,
@@ -136,7 +165,7 @@ def save(fig, out_dir: Path, name: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for suffix in ("pdf", "png"):
         fig.savefig(out_dir / f"{name}.{suffix}", bbox_inches="tight",
-                    facecolor="#fcfcfb")
+                    facecolor="white")
     plt.close(fig)
     print(f"    -> {name}.pdf / .png")
 
@@ -187,7 +216,7 @@ def fig_threshold(data: dict, out: Path) -> None:
         tidy(ax)
     axes[0][0].set_ylabel("score")
     axes[0][-1].legend(loc="lower left")
-    fig.suptitle("A fixed similarity threshold does not transfer across domains",
+    suptitle(fig, "A fixed similarity threshold does not transfer across domains",
                  fontsize=10.5, fontweight="bold", y=1.02)
     save(fig, out, "fig_threshold")
 
@@ -196,22 +225,33 @@ def fig_scaling(data: dict, out: Path) -> None:
     """Encoder cost against the number of edge routers."""
     print("  scaling")
     domains = list(data)
-    fig, axes = plt.subplots(1, len(domains), figsize=(4.2 * len(domains), 3.2), squeeze=False)
+    fig, axes = plt.subplots(
+        1, len(domains), figsize=(COLUMN_W, 1.75), squeeze=False, sharey=True,
+    )
     for ax, domain in zip(axes[0], domains):
         ticks = []
         for strategy, block in data[domain].items():
             xs, means, errors = _xy(block, "encoder_runs")
             series(ax, xs, means, errors, strategy)
             ticks = xs
-        ax.set_title(domain)
-        ax.set_xlabel("edge routers")
+        ax.set_title(domain, fontsize=7.5, fontweight="normal")
+        ax.set_xlabel("edge routers", fontsize=7)
         ax.set_xticks(ticks)
-        ax.set_xticklabels([f"{int(t)}" for t in ticks])
+        ax.set_xticklabels([f"{int(t)}" for t in ticks], fontsize=6.5)
+        ax.tick_params(axis="y", labelsize=6.5)
         ax.set_ylim(bottom=0)
         tidy(ax)
-    axes[0][0].set_ylabel("encoder inferences per run")
-    axes[0][-1].legend(loc="center right")
-    fig.suptitle("Encoder cost grows with network size unless routers share what they learn",
+    axes[0][0].set_ylabel("encoder inferences", fontsize=7)
+    # One legend under both panels: inside a panel it sat on the data, and at
+    # this width there is no corner big enough to hold three entries.
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.tight_layout(pad=0.3, rect=(0, 0.11, 1, 1))
+    fig.legend(
+        handles, labels, loc="lower center", ncol=3, fontsize=6.5,
+        bbox_to_anchor=(0.5, 0.0), handlelength=2.4, columnspacing=1.1,
+        handletextpad=0.4, borderaxespad=0.0,
+    )
+    suptitle(fig, "Encoder cost grows with network size unless routers share what they learn",
                  fontsize=10.5, fontweight="bold", y=1.02)
     save(fig, out, "fig_scaling")
 
@@ -234,7 +274,7 @@ def fig_rate(data: dict, out: Path) -> None:
         tidy(ax)
     axes[0][0].set_ylabel("95th percentile resolution time (ms)")
     axes[0][-1].legend(loc="upper left")
-    fig.suptitle("Queueing behind the encoder is what load exposes",
+    suptitle(fig, "Queueing behind the encoder is what load exposes",
                  fontsize=10.5, fontweight="bold", y=1.02)
     save(fig, out, "fig_rate")
 
@@ -262,7 +302,7 @@ def fig_convergence(data: dict, out: Path) -> None:
         tidy(ax)
     axes[0][0].set_ylabel("share resolved without an encoder run")
     axes[0][-1].legend(loc="lower right")
-    fig.suptitle("Being taught converges faster than learning alone",
+    suptitle(fig, "Being taught converges faster than learning alone",
                  fontsize=10.5, fontweight="bold", y=1.02)
     save(fig, out, "fig_convergence")
 
@@ -314,7 +354,7 @@ def fig_main(data: dict, out: Path) -> None:
             ax.set_title(f"{domain} - {title}" if col == 0 else title)
             ax.grid(axis="x", visible=False)
             tidy(ax)
-    fig.suptitle("Same accuracy, less work", fontsize=11, fontweight="bold", y=1.0)
+    suptitle(fig, "Same accuracy, less work", fontsize=11, fontweight="bold", y=1.0)
     fig.tight_layout()
     save(fig, out, "fig_main")
 
@@ -345,7 +385,7 @@ def fig_ablation(data: dict, out: Path) -> None:
         ax.set_title(domain)
         ax.grid(axis="y", visible=False)
         tidy(ax)
-    fig.suptitle("Removing one mechanism at a time", fontsize=10.5,
+    suptitle(fig, "Removing one mechanism at a time", fontsize=10.5,
                  fontweight="bold", y=1.02)
     save(fig, out, "fig_ablation")
 
@@ -372,7 +412,7 @@ def fig_energy(data: dict, out: Path) -> None:
         tidy(ax)
     axes[0][0].set_ylabel("energy per run (J)")
     axes[0][-1].legend(loc="upper left")
-    fig.suptitle("Semantic forwarding moves the energy budget from radio to compute",
+    suptitle(fig, "Semantic forwarding moves the energy budget from radio to compute",
                  fontsize=10.5, fontweight="bold", y=1.02)
     save(fig, out, "fig_energy")
 
@@ -418,7 +458,7 @@ def fig_robust(data: dict, out: Path) -> None:
     domains = list(data)
     arms = ["gs-ndn-unverified-import", "gs-ndn", "gs-ndn-robust"]
     fig, axes = plt.subplots(
-        2, len(domains), figsize=(4.6 * len(domains), 6.0), squeeze=False
+        2, len(domains), figsize=(COLUMN_W, 3.05), squeeze=False, sharex=True,
     )
     for column, domain in enumerate(domains):
         rows = data[domain]
@@ -431,16 +471,25 @@ def fig_robust(data: dict, out: Path) -> None:
                     continue
                 xs, means, errors = _xy(rows[arm], metric)
                 series(ax, [x * 100 for x in xs], means, errors, arm)
-            ax.set_xlabel("compromised routers (%)")
-            ax.set_ylabel(label)
+            ax.tick_params(labelsize=6.5)
             tidy(ax)
-        axes[0][column].set_title(domain)
-        axes[0][column].legend(loc="lower left")
-    fig.suptitle(
+        axes[1][column].set_xlabel("compromised routers (%)", fontsize=7)
+        axes[0][column].set_title(domain, fontsize=7.5, fontweight="normal")
+    axes[0][0].set_ylabel("satisfaction (ISR)", fontsize=7)
+    axes[1][0].set_ylabel("realised error", fontsize=7)
+    # Three arms named once under the figure.  The old per-panel legend was set
+    # at 8 pt in a figure printed at 0.37 scale, which reached the page at 3 pt.
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.tight_layout(pad=0.3, rect=(0, 0.13, 1, 1))
+    fig.legend(
+        handles, labels, loc="lower center", ncol=1, fontsize=6.5,
+        bbox_to_anchor=(0.5, 0.0), handlelength=2.4, handletextpad=0.4,
+        labelspacing=0.35, borderaxespad=0.0,
+    )
+    suptitle(fig,
         "Verification-grounded reputation under a persistent poisoning attacker",
         fontsize=10.5, fontweight="bold", y=0.98,
     )
-    fig.tight_layout()
     save(fig, out, "fig_robust")
 
 
@@ -488,7 +537,7 @@ def fig_vocabulary(data: dict, out: Path) -> None:
         ax.set_title(domain)
         ax.legend(loc="upper right")
         tidy(ax)
-    fig.suptitle(
+    suptitle(fig, 
         "The sharing win tracks unshared vocabulary, not run length",
         fontsize=10.5, fontweight="bold", y=1.02,
     )
@@ -505,8 +554,15 @@ def main() -> int:
         help="also copy the PDFs into paper/figures/, so the paper directory "
              "is self-contained and uploading it alone to Overleaf compiles",
     )
+    parser.add_argument(
+        "--titles", action="store_true",
+        help="draw the figure titles, which the manuscript omits because its "
+             "captions already say the same thing",
+    )
     args = parser.parse_args()
 
+    global SHOW_TITLES
+    SHOW_TITLES = args.titles
     style()
     print(f"[*] figures -> {args.out}")
 

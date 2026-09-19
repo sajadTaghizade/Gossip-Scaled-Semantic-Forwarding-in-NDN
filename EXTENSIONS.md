@@ -1,7 +1,13 @@
 # Extensions under evaluation
 
-Added 2026-09-14. Nothing here is in `RESULTS.md` yet: the pilot numbers below
-say how many seeds produced them, and the twenty-seed campaign has not been run.
+> **Superseded, and kept as a record.** This file was written on 2026-09-14,
+> while the extensions below were still pilots. The twenty-seed campaign has
+> since been run and `RESULTS.md` was regenerated from it, so the numbers here
+> are the pilot ones and `RESULTS.md` is the authority wherever the two differ.
+> What this file still records is *why* each arm exists and what single variable
+> it changes, which the results file does not say.
+
+Added 2026-09-14. The pilot numbers below say how many seeds produced them.
 
 **These changes alter what `gs-ndn` means.** Verification now reaches mappings
 learned over gossip, which it did not before (§0.2). That was a deliberate
@@ -9,7 +15,7 @@ decision, taken because the alternative was shipping a paper whose central
 "verify before you trust" claim held for half the system and silently failed for
 the half the design is actually about. The consequence is that **every result
 file in `results/` predates this change and must be regenerated**, including the
-numbers currently in `RESULTS.md` and `Project_Status_Report.pdf`.
+numbers then in `RESULTS.md`. That regeneration has since happened.
 
 `gs-ndn-unverified-import` restores the old behaviour exactly, so the pre-fix
 results remain reproducible on demand and the defect's cost stays measurable.

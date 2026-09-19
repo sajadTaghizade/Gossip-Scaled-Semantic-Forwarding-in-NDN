@@ -36,6 +36,10 @@ and is reported as such.
 
 **Authors:** Mohammad Mahdi Yari, Sajjad Taghizadeh · **Advisor:** Dr. Mohammadreza Shakournia
 
+Start with [`RESULTS.md`](RESULTS.md) for every measured number with its
+confidence interval, or [`paper/paper-draft.pdf`](paper/paper-draft.pdf) for the
+six-page write-up. `Running it` below reproduces the campaign from source.
+
 > **On the name "SAF".** Earlier revisions used SAF as shorthand for the
 > semantic name-based forwarding of Amadeo et al. That collides with SAF,
 > Stochastic Adaptive Forwarding (Posch, Rainer and Hellwagner, IEEE/ACM
@@ -116,30 +120,39 @@ to a specific protocol gap.
 
 **Sharing slows how fast cost grows with the network — the primary result,
 and it is horizon-scoped.** Encoder inferences for the same workload over a
-60-second run, edge routers 1 → 16:
+60-second run, on the hospital catalog, as edge routers go 1 → 16:
 
-| Edge routers | 1 | 2 | 4 | 8 | 16 | Growth |
-|---|---:|---:|---:|---:|---:|---:|
-| SAF (no cache) | 2,022 | 2,045 | 2,062 | 2,073 | 2,079 | +2.8% |
-| SAF+ES (per-router cache) | 833 | 901 | 1,006 | 1,155 | 1,330 | **+59.6%** |
-| GS-NDN (gossiped) | 875 | 894 | 881 | 918 | 962 | **+9.9%** |
+| Edge routers | 1 | 2 | 4 | 6 | 8 | 12 | 16 | Growth |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| SAF (no cache) | 2,022 | 2,045 | 2,062 | 2,070 | 2,073 | 2,077 | 2,079 | +2.8% |
+| SAF+ES (per-router cache) | **833** | 901 | 1,006 | 1,087 | 1,155 | 1,259 | 1,330 | **+59.6%** |
+| GS-NDN (gossiped) | 875 | **894** | **881** | **896** | **918** | **937** | **962** | **+9.9%** |
+| *gossip saves* | *−5.0%* | *+0.8%* | *+12.4%* | *+17.6%* | *+20.5%* | *+25.6%* | *+27.7%* | |
 
-SAF pays for every FIB miss, so there is nothing cached to erode and it barely
-grows. SAF+ES caches locally and thins as routers multiply. Sharing what one
-router has already resolved holds growth to a sixth of that. This claim is
-independent of ε or any threshold — it is measured at a single fixed operating
-point and holds regardless of it.
+Read this down the columns, not across. **SAF is not the rival** — it caches
+nothing, so it pays for every FIB miss and there is nothing to erode. The
+comparison that matters is SAF+ES against GS-NDN, and it changes sign along the
+row. At one edge router gossip is the *worse* of the two: there is nobody to
+share with, so anti-entropy is pure overhead. The two cross between two and four
+routers, and from there the gap widens, because total traffic is fixed and only
+the number of caches it is split across is growing. At sixteen routers a
+per-router cache recomputes the same resolution up to sixteen times; gossip
+computes it once and spreads it.
 
-**Two scope conditions, both measured, both easy to miss from that table.**
-It is a 60-second run, and the gap is partly a warm-up cost that amortises: over
-600 seconds SAF+ES grows +14.4% rather than +55.2%, GS-NDN +2.4% rather than +9.5%, and
-gossip's saving at 16 edge routers falls from 25.6% to 6.5%. The ordering never
-reverses at scale, but the magnitude does — the headline is the short-horizon
-figure. And **below about four edge routers gossip is a net loss**: at one edge
-router there is nobody to share with and anti-entropy costs 4–5% more inferences
-than a plain per-router cache. Sharing pays a network that is large and still
-learning its catalog; it pays progressively less as that network settles. See
-[`RESULTS.md`](RESULTS.md) §2.
+So the result is not "gossip is cheaper". It is that **the cost of a per-router
+cache grows with the network and the cost of a shared one nearly does not** —
++59.6% against +9.9% for identical offered load. This claim is independent of ε
+or any threshold; it is a count of how many times the encoder ran.
+
+**The other scope condition is the horizon, and it is easy to miss from that
+table.** It is a 60-second run, and part of the gap is a warm-up cost that
+amortises. A cold cache costs one inference per router per wording: N routers
+pay it N times, but they pay it once. Over 600 seconds the same comparison is
++14.4% against +2.4%, and gossip's saving at 16 edge routers falls from 25.6%
+to 6.5%. The ordering never reverses at scale, but the magnitude falls by
+roughly two thirds — the headline is the short-horizon figure. Sharing pays a
+network that is large and still learning its catalog, and pays progressively
+less as that network settles. See [`RESULTS.md`](RESULTS.md) §2.
 
 **The error budget holds, but the claim that it forwards more efficiently was
 tested and withdrawn.** Measured out of sample:
@@ -211,9 +224,9 @@ score means nothing outside the embedding space that produced it.
 
 ```
 paper/         the manuscript; self-contained, upload this folder to Overleaf
-  paper.tex
-  figures/     copied from results/figures by make_figures.py --sync-paper
-docs/          project decks, the implementation plan, the Persian status report
+  paper.tex        IEEEtran, six pages
+  paper-draft.pdf  the compiled manuscript
+  figures/         copied from results/figures by make_figures.py --sync-paper
 references/    annotated related work, with a verification status per entry
   papers/      PDFs of the three papers this work is measured against
 gsndn/
@@ -238,7 +251,7 @@ gsndn/
   runner.py      assemble a scenario, run it, score it
 experiments/     model fetch, embedding export, microbenchmarks, campaign, figures
 ndnsim/          ns-3 cross-validation of the transport layer
-tests/           50 tests, most guarding a specific mistake made while building this
+tests/           65 tests, most guarding a specific mistake made while building this
 ```
 
 ## Running it
@@ -283,7 +296,7 @@ rather than folded into the reported rate.
 help.* Against a persistent attacker re-injecting every gossip round,
 GS-NDN's satisfaction falls from 0.941 to 0.854 at 50% compromise and its
 realised error rises from 0.026 to 0.082; with verification restricted to
-locally resolved mappings, as it was before the defect in §17 was found, it
+locally resolved mappings, as it was before the defect in §9 was found, it
 falls to 0.747 with error 0.164 — the budget is a guarantee conditional on honest reporting, and
 that condition is exactly what the attack removes. All three strategies degrade
 alike; what limits the damage is that a router's own confirmed mappings outrank
