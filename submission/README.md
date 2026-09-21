@@ -64,8 +64,41 @@ the reviewer does not.
 - Reference [9], `raza2025smartnets`: the entry lists six authors. The sources
   reachable while checking listed five, without M. N. Ali. Confirm on Xplore.
 
-## Not yet read
+## Dates
 
-The *Ethical Issues*, *Important Dates* and *Registration fee* pages of the
-symposium site were not available when this was written. Check them; the
-deadline in particular is not recorded anywhere here.
+| | |
+|---|---|
+| Paper submission | **22 September 2026** — but see below |
+| Notification of acceptance | 20 October 2026 |
+| Final version | 1 November 2026 |
+| Workshops | 18-20 November 2026 |
+
+The symposium's own Important Dates page writes the first one as "22 September
+Oct 2026", which is not a date. The rest of the schedule settles it: acceptance
+is announced on 20 October, so a 22 October deadline would fall two days after
+authors were told the outcome. It is September.
+
+## Ethical undertaking
+
+Submitting commits the corresponding author to three statements, which the
+*Ethical Issues* page words as follows. The article is the author's own
+research, with other work cited by the rules. It has not been presented in any
+journal or conference and is not under evaluation elsewhere. And:
+
+> "All the authors of the article have full knowledge and satisfaction with all
+> the scientific content, as well as their names, specifications and
+> affiliations."
+
+That last one is why the author order and the email addresses above are not a
+detail to settle later. Five people are being asserted to have agreed to them.
+
+## Fees, for an accepted paper
+
+One full registration per accepted paper. Author rates: 300 USD / 20,000,000
+Rials regular, **150 USD / 10,000,000 Rials student**, 240 USD / 15,000,000
+Rials IEEE member. The discounts behind those numbers are 50% student, 30%
+group, 20% IEEE membership, and only one may be used. Over-length pages are
+1,000,000 Rials each; at six pages there are none.
+
+Payment goes to account 4001047203014404, IBAN IR350100004001047203014404,
+Central Bank.
