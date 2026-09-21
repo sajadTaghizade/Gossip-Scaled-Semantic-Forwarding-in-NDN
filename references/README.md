@@ -1,10 +1,13 @@
 # Related work
 
 Assembled while checking whether this project's two contributions are actually
-new. **The PDFs are not in the repository** — the machine this was assembled on
-could not reach arxiv.org, ieeexplore.ieee.org, dl.acm.org, doi.org or
-named-data.net (egress policy, 403 on CONNECT). Run `./fetch.sh` from a machine
-with normal network access and the open-access ones land in `pdf/`.
+new. **The PDFs are not in the repository.** Partly because the machine this was
+assembled on could not reach arxiv.org, ieeexplore.ieee.org, dl.acm.org, doi.org
+or named-data.net (egress policy, 403 on CONNECT), and partly on purpose: this
+repository is public, and redistributing other people's published papers from it
+is not ours to do. Every entry below carries its venue and DOI, which is what
+you need to find it. Run `./fetch.sh` from a machine with normal network access
+and the open-access ones land in `pdf/`, which `.gitignore` keeps untracked.
 
 **Verification status is marked per entry and matters.** Most of this was
 assembled from search results, not from reading the papers. Anything marked

@@ -36,10 +36,20 @@ and is reported as such.
 
 **Authors:** Mohammad Mahdi Yari, Sajjad Taghizadeh · **Advisor:** Dr. Mohammadreza Shakournia
 
-Start with [`RESULTS.md`](RESULTS.md) for every measured number with its
-confidence interval, or [`paper/paper-draft.pdf`](paper/paper-draft.pdf) for the
-six-page write-up, prepared for IST 2026. `Running it` below reproduces the
-campaign from source.
+---
+
+| | |
+|---|---|
+| **The paper** | [`paper/paper-draft.pdf`](paper/paper-draft.pdf) — six pages, A4, IEEE format |
+| **Every number, with its confidence interval** | [`RESULTS.md`](RESULTS.md) |
+| **Submitting it** | [`submission/`](submission/README.md) — IST'2026 rules, what to upload, what is still open |
+| **Reproducing it** | `Running it`, below |
+
+The manuscript is **under submission to IST'2026**, which reviews double-blind,
+so the PDF carries no author block; the named one is commented at the top of
+`paper/paper.tex`. See [`submission/`](submission/README.md).
+
+---
 
 > **On the name "SAF".** Earlier revisions used SAF as shorthand for the
 > semantic name-based forwarding of Amadeo et al. That collides with SAF,
@@ -227,11 +237,13 @@ score means nothing outside the embedding space that produced it.
 paper/         the manuscript; self-contained, upload this folder to Overleaf
   paper.tex        IEEEtran, A4, six pages; builds with pdflatex + bibtex
   references.bib   the 24 entries the manuscript cites
-  paper-draft.pdf  the compiled manuscript
+  paper-draft.pdf  the compiled manuscript -- this is the file to submit
   figures/         the two figures paper.tex includes, put there by
                    make_figures.py --sync-paper
-references/    annotated related work, with a verification status per entry
-  papers/      PDFs of the three papers this work is measured against
+submission/    IST'2026: the rules, the steps, and what is still unsettled
+docs/          EXTENSIONS.md, superseded by RESULTS.md and kept as a record
+references/    annotated related work, with a verification status per entry;
+               fetch.sh pulls the open-access PDFs, which stay untracked
 gsndn/
   datasets/      two labelled name catalogs, built from an explicit lexicon,
                  plus grounded variants using Brick/SAREF/Haystack/SSN class names
@@ -254,7 +266,7 @@ gsndn/
   runner.py      assemble a scenario, run it, score it
 experiments/     model fetch, embedding export, microbenchmarks, campaign, figures
 ndnsim/          ns-3 cross-validation of the transport layer
-tests/           65 tests, most guarding a specific mistake made while building this
+tests/           73 tests, most guarding a specific mistake made while building this
 ```
 
 ## Running it

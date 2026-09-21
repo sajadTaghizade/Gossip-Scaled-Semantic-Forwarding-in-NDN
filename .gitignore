@@ -10,3 +10,7 @@ __pycache__/
 *.log
 *.out
 *.synctex.gz
+
+# references/fetch.sh downloads open-access PDFs here. They are other people's
+# papers; this repository is public, so they stay local.
+references/pdf/
