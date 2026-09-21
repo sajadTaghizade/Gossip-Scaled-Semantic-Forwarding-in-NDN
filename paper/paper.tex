@@ -9,7 +9,7 @@
 %% Setup, metrics and catalog construction replicate Amadeo et al. (IEEE IoT
 %% Magazine, Mar 2026); see the comparison-basis subsection for what is
 %% deliberately stricter and why absolute numbers are not compared.
-\documentclass[conference]{IEEEtran}
+\documentclass[conference,a4paper]{IEEEtran}
 \IEEEoverridecommandlockouts
 
 \usepackage{cite}
@@ -19,6 +19,8 @@
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
 \usepackage{balance}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
 
 %% Default \medmuskip carries plus/minus, so justification squeezes the space
 %% around \pm on a tight line and opens it on a loose one -- "11.1+-7.5" and
@@ -40,54 +42,66 @@
 %% self-contained: uploading it alone to Overleaf compiles.
 \graphicspath{{figures/}}
 
+%% \linebreakand is not a built-in IEEEtran command; it must be defined once,
+%% here in the preamble, before \begin{document}. It closes the current
+%% author-alignment environment and reopens a new one, which is what forces
+%% a row break between authors in the \author block below.
+\makeatletter
+\newcommand{\linebreakand}{%
+\end{@IEEEauthorhalign}
+\hfill\mbox{}\par
+\mbox{}\hfill\begin{@IEEEauthorhalign}
+}
+\makeatother
+
 \begin{document}
 
 \title{Gossip-Scaled Semantic Forwarding in\\Named Data Networking}
 
 %% ---------------------------------------------------------------------------
-%% ANONYMISED for review and for supervisor circulation.
-%%
-%% Restore for camera-ready only, and settle two things first:
-%%   (a) the spelling of the first author's surname -- "YariBaran",
-%%       "Yari-Baran" and "Yari Baran" have all been used; pick one and use it
-%%       consistently, because it is the name that gets indexed;
-%%   (b) who the authors are. The idea, implementation and first draft are
-%%       Yari-Baran and Taghizadeh's. Anyone added beyond that is a decision
-%%       for the people involved and their institution's authorship norms, not
-%%       something to inherit from a template.
-%%
-%% \author{\IEEEauthorblockN{MohammadMahdi YariBaran, Sajjad Taghizadeh}
-%% \IEEEauthorblockA{Department of Computer Engineering\\
-%% [University], [City], Iran\\
-%% Email: \{...\}@...}}
+%% CAMERA-READY author block. Replace the two "Given Name Surname" and
+%% "email address or ORCID" placeholders below with real values before
+%% submission. Layout is 3 authors in the first row, 2 in the second, via
+%% \linebreakand (defined in the preamble above).
 %% ---------------------------------------------------------------------------
-\author{\IEEEauthorblockN{Anonymous Authors}
-\IEEEauthorblockA{Submission under review}}
+%% ---------------------------------------------------------------------------
+%% !! shakournia@, pooya.jamshidi@ and shahpour.rahmani@ came from the uploaded
+%% !! draft. mohammadmahdiyari@ut.ac.ir is the address on his commits.
+%% !! sajjad.taghizadeh@ut.ac.ir is a GUESS from the firstname.lastname pattern
+%% !! the other two follow -- and mohammadmahdiyari@ does NOT follow it, so the
+%% !! pattern is not reliable. CONFIRM THIS ADDRESS BEFORE SUBMITTING.
+%% ---------------------------------------------------------------------------
+\author{
+\IEEEauthorblockN{Sajjad Taghizadeh, Mohammad Mahdi Yari, Mohammad R. Shakournia,
+Pooya Jamshidi, Shahpour Rahmani}
+\IEEEauthorblockA{\textit{School of Electrical and Computer Engineering}\\
+\textit{University of Tehran}, Tehran, Iran\\
+\{sajjad.taghizadeh, mohammadmahdiyari, shakournia\}@ut.ac.ir\\
+\{pooya.jamshidi, shahpour.rahmani\}@ut.ac.ir}
+}
 
 \maketitle
 
 \begin{abstract}
-Named Data Networking drops an Interest whose name does not match a
-forwarding-table entry, so two organisations that name the same sensor
-differently cannot reach each other's data. Embedding names and matching them
-by cosine similarity fixes that, at the cost of running a sentence encoder in
-the forwarding path. A per-router cache does not amortise that cost. Split the
-same traffic across more edge routers and each cache sees a thinner slice, so
-over a short horizon the network re-runs the encoder \emph{more} as it grows.
-We share a resolution over anti-entropy gossip instead, once, and only once a
-returned Data packet has proved it. Over a 60\,s run at 16 edge routers this
-holds the growth in encoder invocations to $+9.9\%$ against a per-router
-cache's $+59.6\%$, removing $27.7\%$ of inferences. We also measure what bounds
-the claim. The saving falls to $6.5\%$ over 600\,s, and below about four edge
-routers it reverses. Two further results follow from the same verification
-signal. The feedback a forwarding plane calibrates on is \emph{biased}, not
-merely noisy, and the bias has a protocol cause we can name:
-NDN's Nack cannot separate ``this name is not mine'' from ``this name is mine but not in that
-wording''. And because a gossiped mapping can be falsified, a router can audit
-its peers from verdicts it already collects. That attenuates a persistent
-poisoning attacker by $1.2\times$ to $2.0\times$, growing with attack
-intensity. It is an attenuation and not a breakdown bound; we tested the
-rate-invariance such a bound predicts, and it did not hold.
+Named Data Networking drops a request whose name does not match a router's
+forwarding table, so two hospitals naming the same sensor differently cannot
+reach each other's data. Matching names by embedding similarity fixes this,
+but puts a sentence encoder in the forwarding path on every miss, and a
+per-router cache does not amortise it: split the same traffic across more
+routers and each cache sees less, so over a short run the network calls the
+encoder more often as it grows, not less. We share each resolved mapping over
+gossip instead, once, and only after a returned Data packet confirms it. Over
+a 60\,s run at 16 edge routers this holds encoder-call growth to $+9.9\%$
+against $+59.6\%$ for a per-router cache. The saving has limits: it falls to
+$6.5\%$ over 600\,s and reverses below about four edge routers. The same
+verification step yields two more results. The feedback a router learns from
+is biased, not just noisy: a producer's refusal cannot tell ``this name is not
+mine'' from ``this name is mine, but not in that wording'', a distinction
+NDN's Network Nack was never built to carry. And a gossiped mapping can be
+checked, so a router can audit its peers from verdicts it already has, which
+attenuates a persistent poisoning attacker by $1.2\times$ to $2.0\times$, more
+as the attack grows. That is an attenuation and not a hard bound: the
+rate-independence a bound predicts was tested, and failed.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -98,214 +112,226 @@ prediction, Byzantine resilience.
 \section{Introduction}
 
 Named Data Networking (NDN)~\cite{jacobson2009ccn,zhang2014ndn} forwards on
-names, and a name that does not match the Forwarding Information Base (FIB) is
+names. A name that does not match the Forwarding Information Base (FIB) gets
 dropped. A client asking for \ndn{/hospital/temp-sensor/room-101} gets nothing
 from a network that advertises
-\ndn{/smart-hospital/floor-1/temperature/room-101}, though the data it wants is
-one hop away. Amadeo \emph{et al.}~\cite{amadeo2026} answer this by embedding
-names and forwarding on cosine similarity, caching each resolution in an
+\ndn{/smart-hospital/floor-1/temperature/room-101}, though the data is one hop
+away. Amadeo \emph{et al.}~\cite{amadeo2026} fix this by embedding names and
+matching them with cosine similarity, caching each resolution in an
 \emph{Embedding Store} at the router that made it.
 
-That design leaves a scaling problem its own conclusion names as future work.
-A per-router cache is populated by the traffic that router sees. Add edge
-routers without adding traffic and every cache thins, so the network pays for
-more encoder invocations in total. Our measurements put the effect at
-$+59.6\%$ more inferences from 1 to 16 edge routers on one catalog and
-$+67.4\%$ on the other, for identical offered load.
+That design has a scaling problem their own conclusion leaves as future work.
+A per-router cache learns only from the traffic that router sees. Add edge
+routers without adding traffic and every cache sees a thinner slice, so the
+network calls the encoder more often, not less: $+59.6\%$ more inferences
+from 1 to 16 edge routers on one catalog and $+67.4\%$ on the other, for the
+same offered load.
 
-This paper's premise is that the fix is not a bigger cache but a shared one,
-and that NDN already supplies what makes sharing safe. A semantic match is a
-guess; a returned Data packet proves it. Gossiping only proven mappings means a
-wrong guess never propagates, which is what lets the similarity threshold be
-permissive without the usual cost.
+Our premise is that the fix is a shared cache, not a bigger one, and that
+NDN already supplies what makes sharing safe. The synchronisation NDN has
+does not answer the question semantic forwarding raises: when is a learned
+name-to-route mapping safe to share? Share a wrong resolution and a local
+recognition error becomes a network-wide routing error; wait for certainty
+and approximate matching has no point left. The question is therefore not
+how to disseminate state but how to admit it. A semantic match is a
+hypothesis and a returned Data packet is the producer confirming it, so
+gossiping only confirmed mappings keeps an unsupported guess out of shared
+state. That is what lets the similarity threshold stay permissive without
+the usual cost.
 
-\textbf{Contributions.} We claim three things, each scoped to what we measured.
+\textbf{Contributions.} We make three claims, each scoped to what we
+measured.
 
-\begin{enumerate}
-\item \emph{Sharing, not caching, is what keeps recognition cost from growing
-with the network} (\S\ref{sec:scaling}). We also measure the two conditions
-that bound this: the advantage decays with run length, and reverses below about
-four edge routers.
-\item \emph{The free labels a forwarding plane calibrates on are biased}
-(\S\ref{sec:bias}), and the bias has a nameable protocol cause, not
-noise. We found and corrected an instance of it in our own producer
-model, and report the regime in which correcting it helps and the regime in
-which it does not.
+\begin{itemize}
+\item \emph{Sharing, not caching, is what keeps recognition cost from
+growing with the network} (\S\ref{sec:scaling}). We also measure what bounds
+this: the advantage shrinks with run length and reverses below about four
+edge routers.
+\item \emph{The free labels a forwarding plane calibrates on are biased,
+not just noisy} (\S\ref{sec:bias}), and the bias traces to a specific
+gap in the protocol rather than to noise. We found this defect in our
+own producer model, fixed it, and report where the fix helps and where
+it does not.
 \item \emph{A verifying forwarding plane can audit its own peers}
-(\S\ref{sec:threat}). Byzantine-robust gossip normally cannot detect a liar and
-must settle for bounding its influence; a gossiped mapping is falsifiable, so
-detection is available from verdicts already collected.
-\end{enumerate}
+(\S\ref{sec:threat}). Byzantine-robust gossip normally cannot catch a
+liar, only bound the damage. A gossiped mapping, unlike a gradient, can
+be checked against what its producer actually says.
+\end{itemize}
 
-\textbf{What we do not claim.} Edge tagging---annotating an Interest with the
-resolved prefix so later hops skip the encoder---is Amadeo \emph{et al.}'s
-mechanism, inherited here. Anti-entropy dataset synchronisation is a decade old
-in NDN~\cite{zhu2013chronosync,hoque2013nlsr}; our gossip layer is that
-mechanism carrying a different payload. Learning per-item decision boundaries
-under an error budget is what vCache~\cite{schroeder2025vcache} does for LLM
-prompt caching. We evaluated an error budget as a replacement for the
-similarity threshold, it lost to a threshold tuned on one catalog and carried to
-another, and we report that as a withdrawn claim (\S\ref{sec:risk}).
+\textbf{What we do not claim.} Edge tagging---marking an Interest with its
+resolved prefix so later hops skip the encoder---is Amadeo \emph{et al.}'s,
+inherited here. Anti-entropy synchronisation is a decade old in
+NDN~\cite{zhu2013chronosync,hoque2013nlsr}; our gossip layer carries a
+different payload over it. Learning per-item boundaries under an error budget
+is what vCache~\cite{schroeder2025vcache} does for prompt caching. We tried
+an error budget in place of the similarity threshold; it lost to a threshold
+tuned on one catalog and carried to another, and we report that as a
+withdrawn claim (\S\ref{sec:risk}).
 
-\textbf{Organisation.} Section~\ref{sec:related} places this work against
-semantic forwarding in ICN, the synchronisation layers NDN already provides,
-and the literature on learned boundaries and Byzantine-robust gossip.
-Section~\ref{sec:method} describes the simulator, the producer model and the
-measured cost basis. Sections~\ref{sec:scaling}, \ref{sec:bias}
-and~\ref{sec:threat} present the three contributions, with
-Section~\ref{sec:risk} covering the claim we withdrew;
-Section~\ref{sec:supporting} reports supporting results and
-Section~\ref{sec:limits} the limitations.
+
 
 \section{Background and Related Work}
 \label{sec:related}
 
 \textbf{Semantic forwarding in ICN.} Fuzzy Interest
-Forwarding~\cite{chan2017fuzzy} matches name components with Word2Vec and is the
-original statement of the problem. Amadeo \emph{et al.}~\cite{amadeo2026} use a
-sentence encoder, settle on a threshold of $0.7$, and evaluate a single access
-router. INF-NDN~\cite{raza2024infndn} routes topic tags through central
-supernodes---a \emph{competing} answer that concentrates semantic resolution
-instead of sharing it.
+Forwarding~\cite{chan2017fuzzy} matches name components with Word2Vec and is
+the original statement of this problem. Amadeo \emph{et
+al.}~\cite{amadeo2026} use a sentence encoder, settle on a threshold of
+$0.7$, and evaluate a single access router. INF-NDN~\cite{raza2024infndn}
+routes topic tags through central supernodes, concentrating semantic
+resolution instead of sharing it. Raza \emph{et al.}~\cite{raza2025smartnets}
+pair semantic name matching with a learned network, but for FIB distribution
+and retrieval: their target is prefix compactness and lookup time, not the
+multi-router encoder cost measured here. Amadeo \emph{et
+al.}~\cite{amadeo2026dtn} extend semantic ICN matching to service
+provisioning across cooperating digital twins, a different coordination
+problem from sharing one resolution once it is proven.
 
 \textbf{A note on ``SAF''.} In NDN, SAF already denotes Stochastic Adaptive
 Forwarding~\cite{posch2017saf}. We write ``semantic forwarding'' or name the
-authors; our result files retain the key \texttt{saf} for continuity.
+authors instead. Our result files still use the key \texttt{saf}, for
+continuity with earlier work.
 
-\textbf{Synchronisation NDN already has.} The anti-entropy and rumour-spreading
-pair we use is the classical epidemic construction of Demers \emph{et
-al.}~\cite{demers1987epidemic}, whose $O(\log N)$ propagation under random peer
-choice~\cite{karp2000rumor} is what Section~\ref{sec:frontier} preserves by
-keeping one uniform pick. ChronoSync~\cite{zhu2013chronosync} and its successors
-reconcile datasets by exchanging condensed digests, and
+\textbf{Synchronisation NDN already has.} Our anti-entropy and
+rumour-spreading pair is the classical epidemic construction of Demers
+\emph{et al.}~\cite{demers1987epidemic}, whose $O(\log N)$ propagation under
+random peer choice~\cite{karp2000rumor} Section~\ref{sec:frontier} preserves
+by keeping one uniform pick. ChronoSync~\cite{zhu2013chronosync} and its
+successors reconcile datasets by exchanging condensed digests, and
 NLSR~\cite{hoque2013nlsr} already floods name-prefix reachability over such a
 layer; Moll \emph{et al.}~\cite{moll2022sok} survey how these designs differ.
 Our contribution is not the mechanism but the payload and the precondition: a
-wording-to-route mapping, shared only after a Data packet proved it.
-Section~\ref{sec:scaling} measures an approximation of an unbounded sync layer
-precisely because ``why not just announce the prefix'' is the first objection
-this design invites.
+wording-to-route mapping shared only after a Data packet confirms it.
+Section~\ref{sec:scaling} measures an unbounded version of this sync layer,
+because ``why not just announce the prefix'' is the first objection this
+design invites.
 
 \textbf{Learned boundaries under an error bound.}
 vCache~\cite{schroeder2025vcache} learns per-item thresholds under a user-set
 error bound for prompt caching; Finamore \emph{et
-al.}~\cite{finamore2022approximatekey} do error-controlled similarity caching in
-a networking setting. The boundaries themselves are conformal in the sense of
-Vovk \emph{et al.}~\cite{vovk2005alrw}; pooling calibration across parties is
-federated conformal prediction~\cite{lu2023federated}, and the drifting variant
-we evaluate follows adaptive conformal inference~\cite{gibbs2021aci}. That a
-threshold tuned on one catalog need not hold on another is the covariate-shift
-problem Tibshirani \emph{et al.}~\cite{tibshirani2019covariate} treat formally.
-What is specific to NDN is that the labels are free. An LLM cache needs a judge
-model to decide whether a hit was correct, which is the expense one was trying
-to avoid; a forwarding plane receives Data or a Nack either way.
+al.}~\cite{finamore2022approximatekey} do error-controlled similarity caching
+in a networking setting. The boundaries are conformal in the sense of Vovk
+\emph{et al.}~\cite{vovk2005alrw}, pooling calibration across parties is
+federated conformal prediction~\cite{lu2023federated}, and the drifting
+variant we evaluate follows adaptive conformal
+inference~\cite{gibbs2021aci}. That a threshold tuned on one catalog need not
+hold on another is the covariate-shift problem Tibshirani \emph{et
+al.}~\cite{tibshirani2019covariate} treat formally. What is specific to NDN
+is that the labels come free: an LLM cache needs a judge model to check
+whether a hit was correct, which is the cost one was avoiding, while a
+forwarding plane is told either way.
 
 \textbf{Biased feedback.} Section~\ref{sec:bias} is an instance of
 missing-not-at-random feedback, the pattern Saito \emph{et
-al.}~\cite{saito2020unbiased} treat in implicit-feedback recommendation: the
-label a route receives depends on a producer's declared vocabulary, which is
-also what determines whether the request could have been served. Our
-contribution is locating it in a forwarding plane and identifying the protocol
+al.}~\cite{saito2020unbiased} study in implicit-feedback recommendation. A
+route's label depends on a producer's declared vocabulary, and that same
+vocabulary decides whether the request could have been served at all. Our
+contribution is finding this in a forwarding plane and naming the protocol
 gap that causes it.
 
-\textbf{Byzantine-robust gossip.} Robust aggregation (clipping, trimming, a
-bounded per-peer contribution) bounds an adversary's influence without ever
-identifying it, because in gossip learning a neighbour ships a gradient no
-honest node can check. Section~\ref{sec:threat} exploits the fact that a
-gossiped \emph{mapping} can be.
+\textbf{Byzantine-robust gossip.} Robust aggregation, clipping, trimming, a
+bounded per-peer contribution, bounds an adversary's influence without ever
+identifying it. In gossip learning, a neighbour ships a gradient no honest
+node can check. Section~\ref{sec:threat} exploits a difference: a gossiped
+mapping, unlike a gradient, can be checked against what its producer
+actually says.
 
 \section{System Model and Method}
 \label{sec:method}
 
 \subsection{Simulator}
 
-We embed names with MiniLM~\cite{wang2020minilm}, a distilled Sentence-BERT
-model~\cite{reimers2019sbert} and the one the baseline settles on.
-Each router has a single-server FIFO queue, so a strategy that adds work to the
-forwarding path pays in queueing delay, not in a configuration constant.
-A strategy is consulted at exactly one point---the FIB miss---and told the
-outcome afterwards; Content Store, PIT and exact FIB lookup are identical across
-strategies, so a difference in results is a difference in policy.
+We embed names with MiniLM~\cite{wang2020minilm}, a distilled
+Sentence-BERT~\cite{reimers2019sbert} model and the one the baseline uses. Each router has a single-server FIFO
+queue, so a strategy that adds work to the forwarding path pays in queueing
+delay, not in a fixed constant. A strategy is consulted at one point, the FIB
+miss, and told the outcome afterwards; Content Store, PIT and exact FIB
+lookup are identical across strategies, so a difference in results is a
+difference in policy. The simulator is a discrete-event kernel in Python,
+with no external network simulator.
 
-Similarity may choose a \emph{route}, never decide that two names denote the
-same object. A semantic hit in the Content Store would hand a client data it did
-not request; one in the PIT would return data down the wrong chain.
+Similarity may choose a route, never decide that two names mean the same
+object. A semantic hit in the Content Store would hand a client data it did
+not ask for; one in the PIT would answer down the wrong chain.
 
 \subsection{Costs are measured, not assumed}
 
 Every latency constant is measured on the machine running the study and
-recorded with a flag saying whether it was measured or assumed. One MiniLM-L6
-inference costs $7.045$\,ms. A cosine search over the 50-entry FIB costs
-$0.0045$\,ms. The ratio is about $1566$:$1$, so \emph{the encoder is the only
-cost that matters}: any scheme that optimises the similarity \emph{search}
-optimises a rounding error. Our mechanism therefore targets how often the
-encoder runs, not how fast it runs.
+tagged as measured or assumed. One MiniLM-L6 inference costs $7.045$\,ms and
+a cosine search over the 50-entry FIB costs $0.0045$\,ms, a ratio of about
+$1566$:$1$, so \emph{the encoder is the only cost that matters}: any scheme
+that speeds up the similarity search optimises a rounding error. Our
+mechanism targets how often the encoder runs, not how fast.
 
 \subsection{Producers are modelled, not oracular}
 
 Letting a producer consult ground truth would be the weakest assumption
-available, so instead each holds a \emph{declared schema}: the instance it is
-attached to and the metric terms it answers to, as a service registry or OpenAPI
-description would provide. Declarations are deliberately incomplete: at coverage $0.7$ a producer leaves $29\%$ of the wordings it can be asked by
-undeclared and refuses requests genuinely meant for it. The feedback channel is
-informative without being correct, which is the situation any deployment is in.
+available, so each holds a \emph{declared schema} instead: the instance it
+serves and the terms it answers to, as a service registry or an OpenAPI
+description would provide. Declarations are deliberately incomplete. At
+coverage $0.7$ a producer leaves $29\%$ of the wordings it can be asked by
+undeclared and refuses requests genuinely meant for it. The feedback channel
+is informative without being correct, which is the situation any deployment
+is in.
 
 \subsection{Workload and metrics}
 
-Requests are Poisson arrivals over a Zipf ($\alpha=1.2$) popularity
-distribution, with each consumer population drawing from an overlapping but
-distinct slice of the catalog---without that overlap parameter, sharing would be
-either trivially redundant or trivially useless. Each catalog carries 50
-services, 300 rewordings and 350 distractors that no service can satisfy, so
-precision is measurable.
+Requests arrive as a Poisson process over a Zipf ($\alpha=1.2$) popularity
+distribution, each consumer population drawing from an overlapping but
+distinct slice of the catalog; without that overlap sharing would be
+trivially redundant or trivially useless. Each catalog holds 50 services, 300
+rewordings and 350 distractors that no service can satisfy, so precision
+stays measurable.
 
-Scoring is correctness-aware: every Interest ends in exactly one of
-\emph{correct}, \emph{misdelivered}, \emph{rejected} or \emph{timeout}, judged
-against ground truth the routers never see. Since distractors are supposed to be
-rejected, a single accuracy number would reward a strategy that answers nothing,
-so precision, recall and false-positive rate are reported separately.
+Scoring is correctness-aware. Every Interest ends in one of four states,
+correct, misdelivered, rejected or timeout, judged against ground truth the
+routers never see. Distractors are supposed to be rejected, so a single
+accuracy number would reward a strategy that answers nothing; we report
+precision, recall and false-positive rate separately. Interest Satisfaction
+Rate (ISR) is the share of resolvable Interests answered correctly, the same
+quantity as recall, reported because it is the baseline's metric.
 
 \subsection{Comparison basis}
 \label{sec:basis}
 
-We reproduce the baseline's evaluation setting instead of inventing one: the
-access-edge topology, the one-way latencies (10\,ms client-to-router, 20\,ms
-router-to-provider), the 50-entry FIB, the 30--300 Interests/s range, the Zipf
-skew of $1.2$, a disabled Content Store and an unbounded PIT all come from
-Amadeo \emph{et al.}~\cite{amadeo2026}, and our catalogs share their construction exactly: 50 services, one canonical name and six rewordings each,
-350 satisfiable names, plus an equal number of unrelated ones.
+We reproduce the baseline's evaluation setting rather than invent our own:
+the access-edge topology, one-way latencies (10\,ms client-to-router,
+20\,ms router-to-provider), the 50-entry FIB, the 30--300 Interests/s
+range, the Zipf skew of $1.2$, a disabled Content Store, and an unbounded
+PIT all come from Amadeo \emph{et al.}~\cite{amadeo2026}. Our catalogs
+match their construction exactly: 50 services, one canonical name and six
+rewordings each, 350 satisfiable names, and an equal number of unrelated
+ones.
 
-We report their metrics. Their \emph{service discovery time} is our
-Interest-satisfaction time, decomposing identically; their \emph{processing
-time} is our encoder-invocation count times the measured inference cost, plus
-queueing. Their \emph{share of Interests forwarded on the first attempt} is our
-satisfaction rate, with one deliberate difference. They count an Interest
-successful when it is forwarded and answered; we also require the Data to have
-come from the service the name should resolve to. A confident match to the
-wrong room's sensor is a success under the first definition and a misdelivery
-under ours, and a metric that cannot see that failure cannot be tuned against
-it.
+We report their metrics, mapped onto ours. Their \emph{service discovery
+time} is our Interest-satisfaction time and decomposes the same way; their
+\emph{processing time} is our encoder-invocation count times the measured
+inference cost, plus queueing. Their \emph{share of Interests forwarded on
+the first attempt} is our satisfaction rate, with one deliberate difference:
+they count an Interest successful once it is forwarded and answered, while we
+also require the Data to come from the correct service. A confident match to
+the wrong room's sensor is a success under their definition and a misdelivery
+under ours, and only ours can be tuned against that failure.
 
-\textbf{Absolute numbers are therefore not comparable across the two papers,
-and we do not compare them.} They report near-complete forwarding at
-$\mathrm{Th}=0.7$; ours yields recall of $0.866$ and $0.804$ there. The gap is in the rewordings, not the method. Theirs are synonym substitutions, ours also
-drop hierarchy levels, reorder and abbreviate, and a seventh family draws on
-published IoT vocabularies. Every comparison here is between strategies inside
-one harness, never against a published number.
+\textbf{Absolute numbers are not comparable across the two papers, so we do
+not compare them.} They report near-complete forwarding at
+$\mathrm{Th}=0.7$; ours yields recall of $0.866$ and $0.804$ there. The gap
+is in the rewordings, not the method: theirs are synonym substitutions, ours
+also drop hierarchy levels, reorder and abbreviate, and a seventh family
+draws on published IoT vocabularies. Every comparison here is between
+strategies inside one harness, never against a published number.
 
 \subsection{Cross-validation}
 
-A hand-written simulator can be self-consistent and still model NDN
-incorrectly, so we cross-check the transport layer---the part that is
-\emph{not} our contribution---against ndnSIM on the same topology, delays and
-request pattern with semantic resolution disabled. Median round-trip times
-agree to within $0.11$\,ms once the $1$\,ms producer service time our model
-charges is accounted for. All results are 20 seeded runs with 95\% confidence
-intervals, and they reproduce across processes. Three defects in which an
-interpreter-salted iteration order reached the event queue were found and fixed
-during development. A regression test compares metrics from two child processes
-run under differing
-\texttt{PYTHONHASHSEED} values.
+A hand-written simulator can be internally consistent and still model NDN
+incorrectly, so we cross-check the transport layer, which is not our
+contribution, against ndnSIM on the same topology, delays and request
+pattern, with semantic resolution off. Median round-trip times agree to
+within $0.11$\,ms once the $1$\,ms producer service time our model charges is
+accounted for. All results are 20 seeded runs with 95\% confidence intervals
+and reproduce across processes: three defects let interpreter-salted
+iteration order reach the event queue, and a regression test now compares two
+child processes run under differing \texttt{PYTHONHASHSEED} values.
 
 \section{Scaling: Sharing versus Caching}
 \label{sec:scaling}
@@ -322,9 +348,9 @@ Fig.~\ref{fig:scaling} is the primary result. Semantic forwarding without a
 cache pays for every FIB miss, so it has nothing to erode and grows $+2.8\%$
 and $+3.1\%$ from 1 to 16 edge routers. The per-router cache thins as routers
 multiply and grows $+59.6\%$ on hospital and $+67.4\%$ on city. Sharing holds
-that to $+9.9\%$ and $+17.3\%$, removing $27.7\%$ and $28.3\%$ of all
-inferences at 16 edge routers. The claim is independent of any threshold or
-error budget: it is a property of how many times the encoder runs.
+that to $+9.9\%$ and $+17.3\%$, removing $27.7\%$ and $28.3\%$ of inferences
+at 16 edge routers. The claim is independent of any threshold or error
+budget: it is a property of how many times the encoder runs.
 
 \subsection{Two conditions that bound it}
 
@@ -332,7 +358,7 @@ error budget: it is a property of how many times the encoder runs.
 $N$ routers pay it $N$ times, but they pay it once. Over 600\,s instead of
 60\,s the per-router cache grows $+14.4\%$ rather than $+55.2\%$, and gossip's
 saving at 16 edge routers falls from $25.6\%$ to $6.5\%$ (city: $26.8\%$ to
-$9.2\%$). The ordering never reverses, but the magnitude does. Sharing pays a
+$9.2\%$). The ordering never reverses, but the magnitude does: sharing pays a
 network that is large and still learning its catalog.
 
 \textbf{Network size.} At a single edge router there is nobody to share with,
@@ -341,16 +367,15 @@ cache. The benefit appears from about four edge routers upward.
 
 \subsection{Is the decay an artifact of a closed catalog?}
 
-A natural hypothesis is that the decay is an artifact of a finite catalog: once
-every router has met all 300 rewordings there is nothing left to learn. We
-tested it by introducing wordings over the run instead of making them all
-askable at $t=0$, drawn from an independent random stream so only \emph{which}
-wording a request uses changes. The hypothesis is false, and instructively so:
-a slower arrival rate lowers the saving at \emph{every} horizon instead of
-sustaining it, from $25.6\%$ (closed) to $3.0\%$ (one new wording every 5\,s)
-at 60\,s, monotone across the grid and on both catalogs. Gossip's saving comes
-from the \emph{backlog} of resolutions some routers hold and others do not, and
-a closed catalog at $t=0$ is the largest backlog obtainable.
+A natural hypothesis is that the decay is an artifact of a finite catalog:
+once every router has met all 300 rewordings there is nothing left to learn.
+We tested it by introducing wordings over the run instead of making them
+askable at $t=0$. The hypothesis is false, and instructively so: a slower
+arrival rate lowers the saving at \emph{every} horizon instead of sustaining
+it, from $25.6\%$ (closed) to $3.0\%$ (one new wording every 5\,s) at 60\,s.
+Gossip's saving comes from the \emph{backlog} of resolutions some routers hold
+and others do not, and a closed catalog at $t=0$ is the largest backlog
+obtainable.
 
 \subsection{Would a more aggressive sync layer do better?}
 
@@ -359,121 +384,149 @@ turn it on and drop this layer. We bound that with an arm in which every router
 reconciles with every peer each round with no cap per exchange. It removes
 \emph{fewer} inferences than the bounded protocol ($21.0\%$ against $25.6\%$ at
 16 edge routers) while sending $1.2$--$1.6\times$ the bytes. Anti-entropy at
-fanout 2 already reaches everyone in $O(\log N)$ rounds; what limits the saving
-is how many distinct wordings the network has yet to see, which no amount of
-synchronisation changes. The part of the design doing the work is \emph{what} is
-shared and \emph{when}---a mapping, only once a Data packet proved it---not how
-aggressively.
+fanout 2 already reaches everyone in $O(\log N)$ rounds, and what limits the
+saving is how many distinct wordings the network has yet to see, which no
+amount of synchronisation changes. What does the work is \emph{what} is shared
+and \emph{when}, not how aggressively.
 
 \subsection{A Pareto frontier, not an operating point}
 \label{sec:frontier}
 
-The gossip period is a degree of freedom, and a single value would hide a trade
-worth seeing. Sweeping it from $0.25$ to $5$\,s at 16 edge routers moves the
-saving from $24.4\%$ to $18.0\%$ while gossip traffic falls from $933$ to
-$433$\,kB. At 4 edge routers the saving is flat across the same range
-($8.5$--$9.6\%$) and a longer period is nearly free. The exchange rate between
-bytes and inferences therefore depends on network size, and a conclusion drawn
-at one operating point would have been wrong at the other. The chosen $0.5$\,s
-is also Pareto-optimal among the points measured: $0.25$\,s is worse on
-\emph{both} axes.
+The gossip period is a degree of freedom, and a single value would hide a
+trade worth seeing. Sweeping it from $0.25$ to $5$\,s at 16 edge routers moves
+the saving from $24.4\%$ to $18.0\%$ while gossip traffic falls from $933$ to
+$433$\,kB; at 4 edge routers the saving is flat across the same range
+($8.5$--$9.6\%$). The exchange rate between bytes and inferences therefore
+depends on network size, and a conclusion drawn at one operating point would
+have been wrong at the other. The chosen $0.5$\,s is Pareto-optimal among the
+points measured: $0.25$\,s is worse on \emph{both} axes.
 
-\textbf{Delta-biased peer selection.} Once converged, the modal anti-entropy
-exchange is two agreeing digests and no payload. Ranking partners by how far
-behind they are redirects those exchanges and costs no messages, since the
-sender already keeps the watermark. One pick of \texttt{fanout} stays
-uniform: a purely greedy rule is no longer an epidemic process, and can starve
-a peer that never tops the ranking. This is the only mechanism we tested that
-moves the frontier outward instead of along it. Paired at 16 edge routers it
-saves $11.1 \pm 7.5$ inferences while sending $3.68 \pm 0.96\%$ fewer bytes at
-$0.5$\,s, and $24.9 \pm 7.3$ inferences at $1.0$\,s (20/20 seeds), with
-satisfaction unchanged. The honest magnitude is $1$--$1.5\%$ of invocations and
-$3\%$ of bytes, a refinement that costs nothing and is worth no headline. It
-helps only mid-range, which is itself evidence it works for the stated reason.
+\textbf{Delta-biased peer selection.} Once converged, the modal exchange is
+two agreeing digests and no payload. Ranking partners by how far behind they
+are redirects those exchanges for free, keeping one uniform pick of
+\texttt{fanout} so the process stays epidemic. It is the only mechanism we
+tested that moves the frontier outward instead of along it, saving
+$11.1 \pm 7.5$ inferences at $0.5$\,s and $24.9 \pm 7.3$ at $1.0$\,s (20/20
+seeds), though only $1$--$1.5\%$ of invocations and only at mid-range sizes.
+
+\subsection{Latency and energy}
+\label{sec:scaling-latency}
+
+Encoding on every FIB miss saturates the forwarding path: p95 round-trip time
+rises from $79$ to $172$\,ms between 30 and 300 Interests/s, while cached and
+gossiped variants stay flat at $78$--$83$\,ms. The knee sits just past 200
+Interests/s, reproducing the bottleneck the baseline reports beyond roughly
+210 for the same encoder, which we did not tune for. On the radio model of
+Askar \emph{et al.}~\cite{askar2024sef}, with encoder energy charged at
+measured CPU draw, GS-NDN uses $634$\,J against $735$\,J uncached and
+$654$\,J for a per-router cache, at higher satisfaction. A character
+$n$-gram control reaches $0.791$ satisfaction where MiniLM reaches $0.969$:
+it resolves abbreviations and fails on true synonymy, which is what the
+encoder pays for.
 
 \section{Calibrating from Free Labels}
 \label{sec:risk}
 
-A threshold is a property of the catalog it was tuned on: $0.7$ is chosen on
-the baseline's catalog and yields recall of $0.866$ and $0.804$ on ours. Worse, one number must serve every route. Some services sit alone in embedding space
-and a loose score is safe, others have near-identical siblings and a high score
-is a coin flip. Every semantic forwarding decision is an experiment the network
-answers, so $(\text{score},\text{verdict})$ pairs accumulate for free. An
-operator can then set an error budget $\varepsilon$ instead of a threshold. For
-route $r$, take the lowest score whose upper confidence bound on the error rate
-among observations at or above it stays within $\varepsilon$. We use a Wilson
-bound, since with a dozen observations the normal approximation assigns a route
-with no errors a bound of exactly zero, and shrink each route toward a pooled
-boundary at a rate set by its own evidence.
+A threshold is a property of the catalog it was tuned on: $0.7$ works on the
+baseline's and yields recall of $0.866$ and $0.804$ on ours. One number must
+also serve every route. Some services sit alone in embedding space and a
+loose score is safe; others have near-identical siblings and a high score is
+a coin flip. Every semantic forwarding decision
+is an experiment the network answers, so $(\text{score},\text{verdict})$ pairs
+accumulate for free, and an operator can set an error budget $\varepsilon$
+instead: for route $r$, the lowest score whose upper confidence bound on the
+error rate among observations at or above it stays within $\varepsilon$. We
+use a Wilson bound, since with a dozen observations the normal approximation
+gives a route with no errors a bound of exactly zero, and shrink each route
+toward a pooled boundary at a rate set by its own evidence.
 
-Two results follow, and only one of them is good.
+Two results follow from this. Only one of them is good.
 
 \textbf{Risk control deadlocks without exploration.} A boundary set too high
-blocks exactly the decisions that would produce the evidence to lower it. Left
-unexplored the controller settles at refuse-everything and stays there, reaching
-$0.732$ satisfaction at $\varepsilon=0.02$; tightening $\varepsilon$ further
-changes nothing because it is already refusing what it can. Spending $5\%$ of
-refused decisions on evidence reaches $0.818$. This is not an estimator bug but
-a property of learning from one's own choices, and we report those exploratory
-forwards separately because they are decisions the budget did not cover.
+blocks exactly the decisions that would produce the evidence to lower it.
+Left unexplored the controller settles at refuse-everything and stays there,
+reaching $0.732$ satisfaction at $\varepsilon=0.02$; tightening $\varepsilon$
+changes nothing, since it is already refusing what it can. Spending $5\%$ of
+refused decisions on evidence reaches $0.818$. This is not an estimator bug
+but a property of learning from one's own choices, and we report those
+exploratory forwards separately because they are decisions the budget did not
+cover.
 
 \textbf{The efficiency claim was tested and withdrawn.} The budget holds
-out-of-sample in all fourteen tests. But against a threshold tuned on one
-catalog and carried to the other, the controller Pareto-dominates in \emph{none}
-of fourteen comparisons while the transferred threshold dominates in seven. What
-survives is narrower: the controller needs no labelled sample of the domain it
-runs on. An operator who \emph{has} one should tune a threshold instead.
+out-of-sample in all fourteen tests: two catalogs crossed with seven error
+budgets from $\varepsilon = 0.02$ to $\varepsilon = 0.40$. But against a
+threshold tuned on one catalog and carried to the other, the controller
+Pareto-dominates in \emph{none} of the fourteen while the transferred
+threshold dominates in seven. What survives is narrower: the controller needs
+no labelled sample of the domain it runs on. An operator who has one should
+tune a threshold instead.
 
 \section{The Feedback is Biased, Not Just Noisy}
 \label{sec:bias}
 
-This is the finding the paper stands on alongside \S\ref{sec:scaling}, and it
-emerged from a defect in our own producer model.
+This is the finding the paper stands on, alongside the scaling result. It
+came from a defect we found in our own producer model.
 
-A producer refusing a semantically-resolved Interest has two distinct reasons,
-and NDN's Nack cannot distinguish them. \emph{This name is not mine} is a
-routing fact: the mapping that sent the Interest here is wrong. \emph{This name
-is mine but not in that wording} is not: the route was correct and only the
-phrasing fell outside what the producer declared. Collapsing the two makes every
-gap in a producer's vocabulary look like evidence against a route that was in
-fact right. HTTP separates 404 from 406 and DNS separates NXDOMAIN from NODATA
-for this reason; semantic forwarding is what makes the distinction necessary in
-NDN.
+A producer refusing a semantically-resolved Interest has two distinct
+reasons, and a plain refusal cannot tell them apart. ``This name is not
+mine'' is a routing fact: the mapping that sent the Interest here was
+wrong. ``This name is mine, but not in that wording'' is not: the route was
+correct, and only the phrasing fell outside what the producer declared.
+Collapsing the two makes every gap in a producer's vocabulary look like
+evidence against a route that was right. HTTP separates 404 from 406 for
+this reason and DNS separates NXDOMAIN from NODATA. NDN's Network Nack was
+never built to carry the distinction; its reason codes cover
+forwarding-plane conditions such as congestion or a missing route, not a
+producer's semantic judgement. Semantic forwarding is what makes that
+judgement necessary.
 
 \textbf{The distinction has to be one a producer can make.} Our first
-implementation tested whether the producer published \emph{the prefix the router
-chose}---a test a misroute satisfies by construction, since that is why the
-Interest was routed there. Measured at full declaration coverage, where a
-genuine wording gap is nearly impossible, 132 of 157 refusals reported
-``unknown wording'' about a route that was simply wrong, 2 were the case the
-label exists for, and the routing-error label never fired once. The channel
-carried almost no information.
+implementation tested whether the producer published \emph{the prefix the
+router had chosen}. A misroute satisfies that test by construction, since
+that prefix is why the Interest was routed there. At full declaration
+coverage, where a genuine wording gap is nearly impossible, 132 of 157
+refusals reported ``unknown wording'' about a route that was wrong, 2 were
+the case the label exists for, and the routing-error label never fired.
+The channel carried almost no information.
 
-What a producer genuinely knows is which \emph{instance} it is attached to:
-the room, the junction, the meter. A request that does not name that instance is not
-for this service whatever the wording. That test is exact in our runs: every
-instance mismatch was a real misroute or an unsatisfiable distractor, with no
-false positives. It converts a dead channel into an informative one: at
-coverage $0.5$, $291$ refusals are correctly labelled routing errors and $546$
-are wording gaps, $71\%$ of them genuine.
+What a producer does know is which \emph{instance} it is attached to: the
+room, the junction, the meter. A request that does not name that instance
+is not for this service, however it is worded. That test is exact in our
+runs: every instance mismatch was a real misroute or an unsatisfiable
+distractor, with no false positives. It turns a dead channel into an
+informative one. At coverage $0.5$, $291$ refusals are correctly labelled
+routing errors and $546$ wording gaps, $71\%$ of them genuine.
 
-\textbf{The residue inverts.} A producer serving
-temperature in room 101, asked for humidity in room 101, cannot distinguish a
-metric it does not serve from a synonym of its own it forgot to declare. The
-base rate of genuine gaps among such refusals moves from $0.021$ at full
-coverage to $0.711$ at half coverage---and the right policy inverts with it.
-Ignoring ambiguous refusals gains $0.07$ satisfaction at coverage $0.5$
-($0.844$ against $0.774$) and \emph{costs} $0.014$ at full coverage on city
-($0.963$ against $0.978$). Declaration coverage is a property of other
-organisations' service registries, which an operator does not observe.
+\textbf{The residue inverts.} A producer serving temperature readings in
+room 101, asked for humidity in that room, cannot tell a metric it does not
+serve from a synonym of its own it forgot to declare. The base rate of
+genuine gaps among such refusals moves from $0.021$ at full coverage to
+$0.711$ at half, and the right policy inverts with it. Ignoring ambiguous
+refusals gains $0.07$ satisfaction at coverage $0.5$ ($0.844$ against
+$0.774$) and \emph{costs} $0.014$ at full coverage on city ($0.963$ against
+$0.978$). Declaration coverage is a property of other organisations'
+service registries, which an operator does not observe.
 
-We attempted to close this with inverse propensity weighting, estimating the
-propensity per route. It failed. The failure is informative: the estimated weight sat
-between $0.414$ and $0.470$ in \emph{every} regime and on both catalogs, because
-a correct route at low coverage both serves often and is refused often, so a
-route-conditioned ratio barely moves. The quantity that does move is a
+We tried to close this with inverse propensity weighting, estimating a
+propensity per route. It failed informatively: the estimated weight sat
+between $0.414$ and $0.470$ in \emph{every} regime and on both catalogs,
+because a correct route at low coverage both serves often and is refused
+often, so a route-conditioned ratio barely moves. What does move is a
 single network-wide base rate. We report the regime inversion as an open
-problem whose magnitude we have measured, not as a mechanism that closes it.
+problem whose magnitude we have measured, not as a mechanism that closes
+it.
+
+\subsection{Schema drift}
+\label{sec:bias-drift}
+
+Producer relocation hurts every strategy equally, since FIB withdrawal
+invalidates a stale mapping before any producer can refuse it. Schema
+drift is different: a producer quietly narrows what it answers to, with no
+routing event. That removes the confound, and there verification's
+advantage appears: $+0.0042 \pm 0.0018$ satisfaction on hospital (16 of 20
+seeds) and $+0.0124 \pm 0.0045$ on city (19 of 20), paired seed by seed.
+Nothing in the routing plane observes a schema drift; feedback is the only
+signal that can.
 
 \section{Threat Model and Peer Reputation}
 \label{sec:threat}
@@ -489,44 +542,45 @@ thereafter.}
 
 \subsection{Threat model}
 
-\textbf{What the attacker controls.} A fixed share of routers, chosen uniformly
-at random, each a full participant holding real keys and peer relationships, so nothing
-here is defeated by authenticating the channel. It behaves correctly on
-the forwarding path and lies only into gossip; a router that drops traffic is a
-denial-of-service problem the ICN literature already
-treats~\cite{ghali2014poisoning} and would confound the measurement.
+\textbf{What the attacker controls.} A fixed share of routers, chosen
+uniformly at random, each a full participant holding real keys and peer
+relationships, so nothing here is defeated by authenticating the channel.
+Each behaves correctly on the forwarding path and lies only into gossip. A
+router that drops traffic is a denial-of-service problem the ICN literature
+already treats~\cite{ghali2014poisoning} and would confound the
+measurement.
 
-\textbf{What it can do.} Inject fabricated mappings and fabricated calibration
-evidence, re-injecting both every round so that retraction after one round trip
-settles nothing. It knows the catalog well enough to target names clients
-actually request, which is the strong assumption here.
+\textbf{What it can do.} It injects fabricated mappings and calibration
+evidence and re-injects both every round, so one retraction settles nothing.
+It knows the catalog well enough to target names clients request, which is
+the strong assumption here.
 
 \textbf{What it cannot do.} Forge another router's identity, partition the
-network, observe traffic it does not carry, or make a producer answer a name it
-does not publish. This boundary matters for \S\ref{sec:bias}: the refusal reason
-is authored by the producer, so a compromised \emph{router} cannot forge one,
-and what a compromised \emph{producer} could do is unmeasured.
+network, observe traffic it does not carry, or make a producer answer a name
+it does not publish. That boundary matters for \S\ref{sec:bias}: the refusal
+is authored by the producer, so a compromised \emph{router} cannot forge one.
+What a compromised \emph{producer} could do is unmeasured.
 
 \textbf{What limits damage structurally.} A router's own confirmed mappings
-outrank anything it is told. That is not a defence added against this attack; it
-falls out of gossiping only what a returned Data packet proved.
+outrank anything it is told. That is not a defence added against this attack;
+it falls out of gossiping only what a returned Data packet confirmed.
 
 \subsection{Verification-grounded reputation}
 
-Byzantine-robust gossip normally defends without ground truth and must bound an
+Byzantine-robust gossip normally defends without ground truth, bounding an
 adversary's influence without ever identifying it. A gossiped mapping is
 different: it is falsifiable, and the producer answers it. We charge each
 refusal to the peer that supplied the mapping and never reinstall a pair the
 router disproved first-hand. Trust is a Wilson \emph{lower} bound on a peer's
-success rate, mirroring the upper bound on error in \S\ref{sec:risk}---both
+success rate, mirroring the upper bound on error in \S\ref{sec:risk}: both
 bound in the direction that costs us. A peer with no history is believed,
-deliberately: distrusting unaudited peers would break the bootstrap gossip
-exists for.
+deliberately, since distrusting unaudited peers would break the bootstrap
+gossip exists for.
 
-Calibration evidence gets a different defence, since an observation about a
-route is not immediately falsifiable: no single peer may occupy more than a
-quarter of a route's calibration window, bounding contribution by construction
-and not by detection.
+Calibration evidence gets a different defence, since one observation about a
+route is not immediately falsifiable: no single peer may supply more than a
+quarter of a route's calibration window, bounding its contribution by
+construction and not by detection.
 
 \begin{table}[t]
 \caption{Satisfaction and realised error against compromised share, 8 edge
@@ -534,7 +588,7 @@ routers. ``Imports unverified'' is the behaviour before we extended
 verification to mappings learned over gossip.}
 \label{tab:robust}
 \centering
-\small
+\footnotesize
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
 compromised & $0\%$ & $12.5\%$ & $25\%$ & $50\%$ \\
@@ -545,203 +599,119 @@ GS-NDN & $0.941$ & $0.894$ & $0.872$ & $0.854$ \\
 \quad$+$ reputation & $0.941$ & $\mathbf{0.930}$ & $\mathbf{0.922}$ & $\mathbf{0.909}$ \\
 \multicolumn{5}{@{}l}{\emph{hospital}, realised error} \\
 Imports unverified & $0.027$ & $0.103$ & $0.139$ & $0.164$ \\
-GS-NDN & $0.026$ & $0.058$ & $0.070$ & $0.082$ \\
+GS-NDN & $0.026$ & $0.058$ & $0.070$ & $0.081$ \\
 \quad$+$ reputation & $0.026$ & $\mathbf{0.035}$ & $\mathbf{0.037}$ & $\mathbf{0.049}$ \\
 \midrule
 \multicolumn{5}{@{}l}{\emph{city}, satisfaction} \\
+Imports unverified & $0.956$ & $0.843$ & $0.791$ & $0.753$ \\
 GS-NDN & $0.960$ & $0.912$ & $0.890$ & $0.871$ \\
 \quad$+$ reputation & $0.960$ & $\mathbf{0.949}$ & $\mathbf{0.941}$ & $\mathbf{0.930}$ \\
 \multicolumn{5}{@{}l}{\emph{city}, realised error} \\
+Imports unverified & $0.010$ & $0.089$ & $0.134$ & $0.160$ \\
 GS-NDN & $0.007$ & $0.044$ & $0.060$ & $0.071$ \\
-\quad$+$ reputation & $0.007$ & $\mathbf{0.015}$ & $\mathbf{0.021}$ & $\mathbf{0.034}$ \\
+\quad$+$ reputation & $0.007$ & $\mathbf{0.015}$ & $\mathbf{0.021}$ & $\mathbf{0.033}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:robust} and Fig.~\ref{fig:robust} report the effect. At $50\%$
-compromise reputation recovers $0.162$ of the $0.193$ satisfaction the attack
+Table~\ref{tab:robust} and Fig.~\ref{fig:robust} show the effect. At $50\%$
+compromise, reputation recovers $0.162$ of the $0.194$ satisfaction the attack
 costs on hospital ($84\%$) and $0.177$ of $0.207$ on city ($86\%$), and cuts
-realised error by
-$40\%$ and $52\%$. It is free when nobody is attacking---$0.941$ against
-$0.941$---which is the number that decides whether it can be left switched on.
-It works for the stated reason: the count of distrusted peers rises linearly
-with the compromised share, reaching $29.3$ at $50\%$.
+realised error by $40\%$ and $52\%$. Both are measured at the single injection
+rate used throughout this table and figure;
+\S\ref{sec:threat-attenuation} sweeps that rate and finds the recovered share
+is not constant, so these describe one operating point, not a guarantee. It
+costs nothing when nobody is attacking, $0.941$ against $0.941$, which is the
+number that decides whether it can be left switched on. It works for the
+stated reason: the count of distrusted peers rises linearly with the
+compromised share, reaching $29.3$ at $50\%$.
 
 \subsection{An attenuation, not a breakdown bound}
+\label{sec:threat-attenuation}
 
-It is tempting to formalise the residual as a bound. Each pair of an honest
-router and a compromised neighbour admits at most $k$ mappings before the liar
-is cut off, where $k$ is the trust prior. That gives admitted poison
-$\lesssim 2Ef(1-f)k$ for $E$ adjacencies and compromised fraction $f$---%
-quadratic in $f$, and \emph{independent of injection rate}.
+It is tempting to formalise the residual as a hard bound. Each pair of an
+honest router and a compromised neighbour admits at most $k$ mappings before
+the liar is cut off, where $k$ is the trust prior, giving admitted poison
+$\lesssim 2Ef(1-f)k$ for $E$ adjacencies and compromised fraction $f$:
+quadratic in $f$, and \emph{independent of the injection rate}.
 
 We tested both halves. The mechanism half holds: sweeping $k$ over
-$\{1,2,4,8,16\}$ moves surviving poison monotonically from $494$ to $1067$, so
-the admission fee is real and is the knob. \textbf{Rate invariance fails.}
-Taking the attacker from 1 to 16 fabricated mappings per round raises the
-defended arm's realised error by $1.43\times$ on hospital and $1.91\times$ on
-city. A bound counted in pairs does not move with rate; this moves. We therefore
-do not claim a breakdown point.
+$\{1,2,4,8,16\}$ moves surviving poison monotonically from $494$ to $1067$,
+so the admission fee is the knob. \textbf{Rate invariance fails.} Taking the
+attacker from 1 to 16 fabricated mappings per round raises the defended arm's
+realised error by $1.43\times$ on hospital and $1.91\times$ on city. A bound
+counted in pairs should not move with rate; ours does, so we claim no
+breakdown point.
 
-What survives is an attenuation whose value \emph{grows} with attack intensity.
-The undefended arm rises $2.35\times$ and $3.25\times$ over the same range, so
-the ratio between defended and undefended widens from $1.24\times$ at the
-lowest rate to $2.04\times$ at the highest on hospital, and $1.72\times$ to
-$2.93\times$ on city. The defence is worth more the harder it is attacked.
+What survives is an attenuation whose value \emph{grows} with attack
+intensity. The undefended arm rises $2.35\times$ and $3.25\times$ over the
+same range, so the ratio between defended and undefended widens from
+$1.24\times$ to $2.04\times$ on hospital and $1.72\times$ to $2.93\times$ on
+city. The defence is worth more the harder it is attacked.
 
-The sweep also selects a better prior than intuition did. A fee of $k=1$ is best
-under attack but falsely distrusts $10.9$ honest peers on a clean network and
-degrades sharing by $3\%$; $k=2$ distrusts $1.1$ for $0.06\%$, while realising
-$0.037$ error against $k=4$'s $0.044$. We use $k=2$. The honest-network control is what makes that visible; the attack
-column alone would have argued for $1$.
+The sweep also selects a better prior than intuition did. A fee of $k=1$ is
+best under attack but on a clean network falsely distrusts $10.9$ honest
+peers and degrades sharing by $3\%$; $k=2$ distrusts $1.1$ for $0.06\%$,
+while realising $0.037$ error against $k=4$'s $0.044$. We use $k=2$. The
+honest-network control is what makes that visible; the attack column alone
+would have argued for $k=1$.
 
 %% Balance the two columns of the final page so the bibliography ends level.
 %% This has to be issued from the FIRST column of that page: balance.sty warns
-%% and silently does nothing when it is reached in the second, which is what
-%% happened while it sat at the end of the conclusion.
+%% and silently does nothing when it is reached in the second.
+%%
+%% It is load-bearing, not cosmetic. Without it the last two references fall
+%% onto a seventh page. The cost is one overfull \vbox of 4.1pt on the final
+%% page -- a third of a line, and the alternative is a page over the limit.
 \balance
 
-\section{Supporting Results}
-\label{sec:supporting}
-
-\textbf{Latency and energy.} Encoding on every FIB miss saturates the
-forwarding path: p95 round-trip time rises from $79$ to $172$\,ms between 30 and
-300 Interests/s, while cached and gossiped variants stay flat at $78$--$83$\,ms.
-The knee sits just past 200 Interests/s, independently reproducing the
-bottleneck the baseline reports beyond roughly 210 for the same encoder---%
-agreement we did not tune for, and evidence the cost model is calibrated. On the
-radio model of Askar \emph{et al.}~\cite{askar2024sef}, with encoder energy
-charged at measured CPU draw, GS-NDN uses $634$\,J against $735$\,J uncached and
-$654$\,J for a per-router cache, at higher satisfaction. A character $n$-gram
-control reaches $0.791$ satisfaction where MiniLM reaches $0.969$: it resolves
-abbreviations and fails on true synonymy, which is what the encoder pays for.
-
-\textbf{Schema drift.} Producer relocation hurts every strategy equally, since
-FIB withdrawal invalidates a stale mapping before any producer can refuse it.
-Schema drift---a producer quietly narrowing what it answers to, with no routing
-event---removes that confound, and there verification's advantage appears:
-$+0.0042 \pm 0.0018$ satisfaction on hospital (16/20 seeds) and
-$+0.0124 \pm 0.0045$ on city (19/20), paired seed by seed. Nothing in the
-routing plane observes a schema drift; feedback is the only signal that can.
-
-\section{Limitations}
+\section{Limitations and Future Work}
 \label{sec:limits}
 
-\textbf{Our synonyms are easier than standardised ones.} The catalogs are
-generated from a lexicon we wrote. To test whether that lexicon flatters the
-encoder, we added rewordings transcribed from Brick, SAREF, Project Haystack and
-W3C SSN/SOSA. They are markedly harder: on city, rank-1 recognition is $0.578$
-for ontology-derived wordings against $0.920$ for ours. This \emph{confirms} the
-concern instead of removing it, and every recognition number here should be
-read as an upper bound.
+\textbf{Our synonyms are easier than standardised ones.} Our catalogs use a
+lexicon we wrote. To test whether it flatters the encoder we added rewordings
+from Brick, SAREF, Project Haystack and W3C SSN/SOSA. They are markedly
+harder: on city, rank-1 recognition is $0.578$ for ontology-derived wordings
+against $0.920$ for ours. That confirms the concern instead of removing it,
+and every recognition number here should be read as an upper bound.
 
-\textbf{Provenance is not implemented.} Signing an observation so a lie can be
-attributed is the other defence our threat model names, and it is absent. A
-deployment facing this threat model needs it; we show the attack lands and by
-how much, not that reputation alone suffices.
+\textbf{Provenance is not implemented.} Our threat model names one other
+defence: signing an observation so a lie traces to its origin, not to
+whichever honest peer last relayed it. A router that penalises the peer a bad
+mapping arrived from cannot tell an originator from an honest relay, so
+\S\ref{sec:threat} defends against a source, not the network that source
+hides behind. A signed per-hop provenance field on each gossiped mapping is
+the next step.
 
-\textbf{A compromised producer is unmeasured.} Producers are trusted about their
-own services throughout.
+\textbf{A compromised producer is unmeasured.} Producers are trusted about
+their own services throughout; one that lies about its own schema sits
+outside \S\ref{sec:threat}, which controls only routers.
 
-\textbf{The encoder guard is a trade, not a win.} Refusing to pool calibration
-scores across routers running different encoders yields lower satisfaction and
-lower realised error than pooling them naively ($0.948$/$0.023$ against
-$0.951$/$0.027$ at a quarter heterogeneous). For an error-budget system that
-trade is defensible, but it is not a clean improvement.
+\textbf{The encoder guard is a trade, not a win.} Refusing to pool
+calibration scores across routers running different encoders yields lower
+satisfaction \emph{and} lower realised error than pooling naively
+($0.948$/$0.023$ against $0.951$/$0.027$ at a quarter heterogeneous). For an
+error-budget system that trade is defensible, but it is not a clean win.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-Sharing a verified resolution by gossip, rather than caching it per router,
-keeps recognition cost from growing with the network---by an amount we bound
-with the two conditions we measured rather than assumed. The same verification
-signal that makes sharing safe also lets a forwarding plane generate its own
-calibration labels and audit its own peers. Those labels are biased in a way we
-traced to a missing distinction in NDN's Nack, and the regime in which
-correcting that bias helps inverts on a quantity operators cannot observe. We
-report that as an open problem with its magnitude measured, together with two
-mechanisms that did not survive their own evaluation, because a design space is
-described as much by what fails in it as by what works.
+Sharing producer-confirmed resolutions through gossip, rather than caching
+them independently at each router, substantially limits recognition-cost
+growth as the network expands under the evaluated conditions. We identify the
+two factors that bound this benefit: network size and learning horizon. The
+same producer feedback signal that enables controlled sharing also provides a
+source of calibration evidence and peer-audit information for the forwarding
+plane. However, this feedback is not simply noisy; it is biased because
+existing refusal signalling does not distinguish routing errors from
+unexpressed producer vocabulary. We show that correcting this bias can help
+only under regimes determined by declaration coverage, a quantity that may be
+unavailable to operators. Finally, we report two mechanisms that did not
+improve their intended objective under our evaluation, highlighting that
+understanding failure modes is as important as demonstrating successful
+designs.
 
-%% (\balance is issued at the top of the final page; see Supporting Results.)
-
-%% Reference verification, closing the item commit 39db89a left open ("the
-%% paper should not be submitted until the third [group] is checked"). All 22
-%% entries have now been checked against a primary or authoritative secondary
-%% source (publisher page, ACM/IEEE DL listing, or arXiv abstract page), not
-%% recalled from training knowledge:
-%%   - amadeo2026, raza2024infndn, askar2024sef: read from the PDFs in
-%%     references/papers (done in a39342f, before this pass).
-%%   - zhu2013chronosync, hoque2013nlsr, schroeder2025vcache,
-%%     finamore2022approximatekey, saito2020unbiased, posch2017saf,
-%%     lu2023federated, gibbs2021aci, wang2020minilm, chan2017fuzzy: already
-%%     load-bearing in gsndn/ or README.md before this paper existed, and
-%%     re-confirmed here.
-%%   - jacobson2009ccn, zhang2014ndn, reimers2019sbert, demers1987epidemic,
-%%     karp2000rumor, moll2022sok, vovk2005alrw, tibshirani2019covariate,
-%%     ghali2014poisoning: the nine added on 2026-09-17 to reach the venue's
-%%     expected count. All nine check out -- venue, year, author list and
-%%     (where the venue has them) page numbers all match. One bookkeeping note,
-%%     not a paper error: references.bib's schroeder2025vcache entry lists 8 of
-%%     the paper's 10 authors (missing Aditya Desai and Kyle Chu); paper.tex
-%%     cites it as "L.~Schroeder \emph{et al.}", which is unaffected.
-\begin{thebibliography}{99}
-\bibitem{amadeo2026} M.~Amadeo, S.~Serrano, A.~Molinaro, M.~Nitti, and
-G.~Ruggeri, ``Enhancing IoT service discovery through semantic name-based
-forwarding,'' \emph{IEEE Internet Things Mag.}, vol.~9, no.~2, pp.~142--148,
-Mar.\ 2026, doi: 10.1109/MIOT.2025.3587052.
-\bibitem{chan2017fuzzy} K.~Chan \emph{et al.}, ``Fuzzy Interest forwarding,'' in
-\emph{Proc. AINTEC}, 2017.
-\bibitem{raza2024infndn} G.~M.~Raza, I.~Ullah, M.~S.~U.~Din, M.~A.~U.~Rehman,
-and B.-S.~Kim, ``INF-NDN IoT: an intelligent naming and forwarding in name data
-networking for Internet of Things,'' \emph{IEEE Access}, vol.~12, 2024, doi:
-10.1109/ACCESS.2024.3444903.
-\bibitem{posch2017saf} D.~Posch, B.~Rainer, and H.~Hellwagner, ``SAF: stochastic
-adaptive forwarding in named data networking,'' \emph{IEEE/ACM Trans. Netw.},
-vol.~25, no.~2, 2017.
-\bibitem{zhu2013chronosync} Z.~Zhu and A.~Afanasyev, ``Let's ChronoSync:
-decentralized dataset state synchronization in named data networking,'' in
-\emph{Proc. IEEE ICNP}, 2013.
-\bibitem{hoque2013nlsr} A.~K.~M.~M.~Hoque \emph{et al.}, ``NLSR: named-data link
-state routing protocol,'' in \emph{Proc. ACM SIGCOMM ICN Workshop}, 2013.
-\bibitem{schroeder2025vcache} L.~Schroeder \emph{et al.}, ``vCache: verified
-semantic prompt caching,'' arXiv:2502.03771, 2025.
-\bibitem{finamore2022approximatekey} A.~Finamore \emph{et al.},
-``Error-controlled approximate-key caching,'' in \emph{Proc. IEEE INFOCOM}, 2022.
-\bibitem{lu2023federated} C.~Lu \emph{et al.}, ``Federated conformal
-predictors for distributed uncertainty quantification,'' in \emph{Proc. ICML},
-2023.
-\bibitem{saito2020unbiased} Y.~Saito \emph{et al.}, ``Unbiased recommender
-learning from missing-not-at-random implicit feedback,'' in \emph{Proc. WSDM},
-2020.
-\bibitem{jacobson2009ccn} V.~Jacobson \emph{et al.}, ``Networking named
-content,'' in \emph{Proc. ACM CoNEXT}, 2009.
-\bibitem{zhang2014ndn} L.~Zhang \emph{et al.}, ``Named data networking,''
-\emph{ACM SIGCOMM Comput. Commun. Rev.}, vol.~44, no.~3, 2014.
-\bibitem{reimers2019sbert} N.~Reimers and I.~Gurevych, ``Sentence-BERT:
-sentence embeddings using Siamese BERT-networks,'' in \emph{Proc. EMNLP}, 2019.
-\bibitem{wang2020minilm} W.~Wang \emph{et al.}, ``MiniLM: deep self-attention
-distillation for task-agnostic compression of pre-trained transformers,'' in
-\emph{Proc. NeurIPS}, 2020.
-\bibitem{demers1987epidemic} A.~Demers \emph{et al.}, ``Epidemic algorithms for
-replicated database maintenance,'' in \emph{Proc. ACM PODC}, 1987.
-\bibitem{karp2000rumor} R.~Karp \emph{et al.}, ``Randomized rumor spreading,''
-in \emph{Proc. IEEE FOCS}, 2000.
-\bibitem{moll2022sok} P.~Moll \emph{et al.}, ``SoK: the evolution of distributed
-dataset synchronization solutions in NDN,'' in \emph{Proc. ACM ICN}, 2022.
-\bibitem{vovk2005alrw} V.~Vovk, A.~Gammerman, and G.~Shafer, \emph{Algorithmic
-Learning in a Random World}.\ Springer, 2005.
-\bibitem{gibbs2021aci} I.~Gibbs and E.~Cand\`es, ``Adaptive conformal inference
-under distribution shift,'' in \emph{Proc. NeurIPS}, 2021.
-\bibitem{tibshirani2019covariate} R.~J.~Tibshirani \emph{et al.}, ``Conformal
-prediction under covariate shift,'' in \emph{Proc. NeurIPS}, 2019.
-\bibitem{ghali2014poisoning} C.~Ghali, G.~Tsudik, and E.~Uzun, ``Needle in a
-haystack: mitigating content poisoning in named-data networking,'' in
-\emph{Proc. NDSS SENT}, 2014.
-\bibitem{askar2024sef} N.~A.~Askar, A.~Habbal, H.~Hamouda, A.~M.~Alnajim, and
-S.~Khan, ``SEF: a smart and energy-aware forwarding strategy for NDN-based
-Internet of healthcare,'' \emph{Comput. Mater. Contin.}, 2024, doi:
-10.32604/cmc.2024.058607.
-\end{thebibliography}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
 
 \end{document}

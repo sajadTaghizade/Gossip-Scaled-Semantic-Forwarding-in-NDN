@@ -38,7 +38,8 @@ and is reported as such.
 
 Start with [`RESULTS.md`](RESULTS.md) for every measured number with its
 confidence interval, or [`paper/paper-draft.pdf`](paper/paper-draft.pdf) for the
-six-page write-up. `Running it` below reproduces the campaign from source.
+six-page write-up, prepared for IST 2026. `Running it` below reproduces the
+campaign from source.
 
 > **On the name "SAF".** Earlier revisions used SAF as shorthand for the
 > semantic name-based forwarding of Amadeo et al. That collides with SAF,
@@ -224,9 +225,11 @@ score means nothing outside the embedding space that produced it.
 
 ```
 paper/         the manuscript; self-contained, upload this folder to Overleaf
-  paper.tex        IEEEtran, six pages
+  paper.tex        IEEEtran, A4, six pages; builds with pdflatex + bibtex
+  references.bib   the 24 entries the manuscript cites
   paper-draft.pdf  the compiled manuscript
-  figures/         copied from results/figures by make_figures.py --sync-paper
+  figures/         the two figures paper.tex includes, put there by
+                   make_figures.py --sync-paper
 references/    annotated related work, with a verification status per entry
   papers/      PDFs of the three papers this work is measured against
 gsndn/
@@ -318,7 +321,7 @@ a net cost; the benefit appears from about four edge routers upward.
 
 ## Related work
 
-BibTeX for everything below is in [`references.bib`](references.bib); the
+BibTeX for everything below is in [`paper/references.bib`](paper/references.bib); the
 longer annotated list, with a verification status per entry, is in
 [`references/README.md`](references/README.md). Entries there marked
 *unverified* were assembled from search results rather than read.

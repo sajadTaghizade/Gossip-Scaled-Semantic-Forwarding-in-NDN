@@ -226,7 +226,7 @@ def fig_scaling(data: dict, out: Path) -> None:
     print("  scaling")
     domains = list(data)
     fig, axes = plt.subplots(
-        1, len(domains), figsize=(COLUMN_W, 1.75), squeeze=False, sharey=True,
+        1, len(domains), figsize=(COLUMN_W, 1.62), squeeze=False, sharey=True,
     )
     for ax, domain in zip(axes[0], domains):
         ticks = []
@@ -458,7 +458,7 @@ def fig_robust(data: dict, out: Path) -> None:
     domains = list(data)
     arms = ["gs-ndn-unverified-import", "gs-ndn", "gs-ndn-robust"]
     fig, axes = plt.subplots(
-        2, len(domains), figsize=(COLUMN_W, 3.05), squeeze=False, sharex=True,
+        2, len(domains), figsize=(COLUMN_W, 2.20), squeeze=False, sharex=True,
     )
     for column, domain in enumerate(domains):
         rows = data[domain]
@@ -581,14 +581,26 @@ def main() -> int:
         fig_simhash(json.loads(detail.read_text()), args.out)
 
     if args.sync_paper:
+        import re
         import shutil
 
+        # Only the figures paper.tex actually includes.  Copying all ten put
+        # eight unused PDFs in the folder that gets uploaded as the submission,
+        # where they are dead weight and invite the question of what they are.
+        source = (root / "paper" / "paper.tex").read_text()
+        wanted = set(re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", source))
         destination = root / "paper" / "figures"
         destination.mkdir(parents=True, exist_ok=True)
         copied = 0
         for pdf in sorted(args.out.glob("*.pdf")):
+            if pdf.name not in wanted:
+                continue
             shutil.copy2(pdf, destination / pdf.name)
             copied += 1
+        for stale in sorted(destination.glob("*.pdf")):
+            if stale.name not in wanted:
+                stale.unlink()
+                print(f"    [-] {stale.name} (not included by paper.tex)")
         print(f"[+] synced {copied} figures -> {destination}")
 
     print("[+] done")

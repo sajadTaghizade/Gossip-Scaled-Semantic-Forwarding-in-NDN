@@ -1,7 +1,12 @@
-__pycache__/ 
-*.pyc 
-.pytest_cache/ 
-*.aux 
-*.log 
-*.out 
-*.synctex.gz 
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# LaTeX build products. paper.tex and references.bib are the sources; the
+# manuscript PDF is committed as paper/paper-draft.pdf, built from them.
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
